@@ -132,6 +132,61 @@ def main():
                 if st["undo"][-1:] != ["Move"]:
                     problems.append(f"{label}: dragging didn't make a Move step ({st['undo'][-3:]})")
                 page.screenshot(path=str(shots / f"{label}_editing.png"))
+            # Key object: the first picked stays put, the others line up to it
+            page.evaluate("Kit.clear()")
+            a, b = names[3], names[4]
+            page.evaluate("([a, b]) => { Kit.tap(a); Kit.tap(b, true); Kit.setAlignTo('key'); }", [a, b])
+            st = page.evaluate("Kit.state()")
+            if st["key"] != a:
+                problems.append(f"{label}: key object should be the first picked ({a}), got {st['key']}")
+            ra = page.evaluate("n => document.querySelector(`.kit-root [data-name='${n}']`).getBoundingClientRect().left", a)
+            page.evaluate("Kit.align('r')")
+            ra2 = page.evaluate("n => document.querySelector(`.kit-root [data-name='${n}']`).getBoundingClientRect().left", a)
+            rb = page.evaluate("([a, b]) => { const q = n => document.querySelector(`.kit-root [data-name='${n}']`).getBoundingClientRect(); return Math.abs(q(a).right - q(b).right); }", [a, b])
+            if abs(ra - ra2) > 0.5 or rb > 0.6:
+                problems.append(f"{label}: align to key object moved the key or missed ({ra}->{ra2}, gap {rb})")
+            # Lock: can't be nudged; double tap unlocks
+            page.evaluate("n => { Kit.tap(n); Kit.lock(); }", b)
+            before = page.evaluate("Kit.changesText()")
+            page.evaluate("Kit.nudge(0, 5)")
+            if page.evaluate("Kit.changesText()") != before:
+                problems.append(f"{label}: a locked part moved when nudged")
+            page.evaluate("n => { Kit.tap(n); Kit.tap(n); }", b)
+            page.evaluate("Kit.nudge(0, 5)")
+            if page.evaluate("Kit.changesText()") == before:
+                problems.append(f"{label}: double tap didn't unlock")
+            # Versions: save, change, view, make draft, undo
+            page.evaluate("Kit.saveVersion('First try')")
+            page.evaluate("Kit.nudge(0, 3)")
+            draft = page.evaluate("Kit.changesText()")
+            page.evaluate("Kit.view(0)")
+            v = page.evaluate("Kit.changesText()")
+            if 'version “First try”' not in v or v.split("\n")[3:] == draft.split("\n")[3:]:
+                problems.append(f"{label}: viewing a version didn't show its own changes")
+            page.evaluate("Kit.nudge(0, 3)")
+            if page.evaluate("Kit.changesText()") != v:
+                problems.append(f"{label}: a viewed version could be changed")
+            check("viewing a version")
+            page.evaluate("Kit.makeDraft()")
+            if page.evaluate("Kit.state()")["viewing"] != -1 or page.evaluate("Kit.changesText()").split("\n")[3:] != v.split("\n")[3:]:
+                problems.append(f"{label}: make this the draft didn't copy the version")
+            page.evaluate("Kit.undo()")
+            if page.evaluate("Kit.changesText()").split("\n")[3:] != draft.split("\n")[3:]:
+                problems.append(f"{label}: undo didn't bring the old draft back")
+            if page.evaluate("Kit.versions()") != ["First try"]:
+                problems.append(f"{label}: versions list wrong")
+            # Hover tips: appear after a pause, mouse only
+            if not mobile:
+                btn = page.locator(".kit-insp [data-tip]").first
+                btn.hover()
+                page.wait_for_timeout(200)
+                early = page.evaluate("!!document.querySelector('.kit-tip.on')")
+                page.wait_for_timeout(700)
+                late = page.evaluate("(document.querySelector('.kit-tip.on') || {}).textContent || ''")
+                if early or not late:
+                    problems.append(f"{label}: hover tip timing wrong (early={early}, text={late!r})")
+                page.screenshot(path=str(shots / f"{label}_tip.png"))
+                page.mouse.move(5, 5)
             check("editing")
             page.evaluate("Kit.original(true)")
             check("show original")

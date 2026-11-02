@@ -11,12 +11,13 @@
   };
   const STY = { 68: 'Big numeral', 56: 'Big numeral', 44: 'Big numeral', 34: 'Large title', 28: 'Title 1', 22: 'Title 2', 20: 'Title 3', 17: 'Body', 16: 'Callout', 15: 'Subhead', 13: 'Footnote', 12: 'Caption 1', 11: 'Caption 2' };
   const PINK = '#e0457b', BLUE = '#007aff', RED = '#ff3b30', NS = 'http://www.w3.org/2000/svg';
+  const RO = 'This version is read-only. Use “Make this the draft” to change it.', LOCKED = 'Locked. Double-click it to unlock.';
   const AN = { l: 'Align left', c: 'Align centre', r: 'Align right', t: 'Align top', m: 'Align middle', b: 'Align bottom' };
 
   const S = {
     opts: null, root: null, el: {}, device: 'iphone', look: 0, motion: 0, view: 0, custom: {},
     phone: false, open: true, launcher: 'circle', scale: 1,
-    sel: [], key: null, multi: false, snap: true, alignTo: 'selection', original: false,
+    sel: [], key: null, multi: false, snap: true, alignTo: 'key', original: false, versions: [], viewing: -1, draftModel: null, saving: false, lastTap: null,
     model: { v: 1, edits: {} }, undo: [], redo: [], lastNudge: 0, nextGroup: 1,
     hover: null, ptr: null, guides: [], cursor: null, err: '', status: '', showText: false, copied: null,
     inspShut: true, tok: new Map(), touched: new Set(), raf: 0, lsKey: ''
@@ -136,6 +137,7 @@
   /* ---------- the edit model ---------- */
   function E(el) { const k = keyOf(el); return S.model.edits[k] || (S.model.edits[k] = { name: nameOf(el) }); }
   function peek(el) { return S.model.edits[keyOf(el)] || null; }
+  const isLocked = el => !!(peek(el) || {}).lock;
   function prune() {
     const ed = S.model.edits;
     for (const k in ed) {
@@ -148,7 +150,8 @@
       });
       if (e.note != null && !String(e.note).trim()) delete e.note;
       if (!e.g) delete e.g;
-      if (!e.dx && !e.dy && e.w == null && e.h == null && e.r == null && !e.note && !e.g) delete ed[k];
+      if (!e.lock) delete e.lock;
+      if (!e.dx && !e.dy && e.w == null && e.h == null && e.r == null && !e.note && !e.g && !e.lock) delete ed[k];
     }
   }
   function applyEl(el, e) {
@@ -200,7 +203,8 @@
     const list = changeList(), gs = groupsList();
     if (!list.length && !gs.length) return '';
     const d = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    const lines = [`Changes to the ${S.opts.app} prototype${S.opts.title ? ' (' + S.opts.title + ')' : ''}, ${d}`, 'Measured in iPhone points.', ''];
+    const vn = S.viewing >= 0 ? ` · version “${S.versions[S.viewing].name}”` : '';
+    const lines = [`Changes to the ${S.opts.app} prototype${S.opts.title ? ' (' + S.opts.title + ')' : ''}${vn}, ${d}`, 'Measured in iPhone points.', ''];
     list.forEach((c, i) => {
       const e = c.e, parts = [], mv = [];
       if (e.dx) mv.push((e.dx > 0 ? 'right ' : 'left ') + fmt(Math.abs(e.dx)));
@@ -219,23 +223,33 @@
 
   /* ---------- undo and saving ---------- */
   const snapM = () => ({ m: JSON.stringify(S.model), sel: liveSel().map(keyOf), key: S.key ? keyOf(S.key) : null });
-  function save() { if (!store) return; try { store.setItem(S.lsKey, JSON.stringify(S.model)); } catch (e) { S.err = "Couldn't keep your changes on this device"; } }
+  function saveVersions() { if (!store) return; try { store.setItem(S.lsKey + ':versions', JSON.stringify(S.versions)); } catch (e) { S.err = "Couldn't keep the versions on this device"; } }
+  function save() { if (!store || S.viewing >= 0) return; try { store.setItem(S.lsKey, JSON.stringify(S.model)); } catch (e) { S.err = "Couldn't keep your changes on this device"; } }
   function load() {
     if (!store) return;
     try {
       const raw = store.getItem(S.lsKey); if (!raw) return;
       const m = JSON.parse(raw); if (!m || typeof m !== 'object' || !m.edits || typeof m.edits !== 'object') return;
-      const ok = {};
-      for (const k in m.edits) {
-        const e = m.edits[k]; if (!e || typeof e !== 'object' || !/^[np]:/.test(k)) continue;
-        const c = { name: String(e.name || 'Box').slice(0, 80) };
-        ['dx', 'dy', 'w', 'h', 'r', 'w0', 'h0', 'r0', 'g'].forEach(f => { if (Number.isFinite(e[f])) c[f] = e[f]; });
-        if (typeof e.note === 'string') c.note = e.note.slice(0, 500);
-        ok[k] = c;
-      }
+      const ok = cleanEdits(m.edits);
       S.model = { v: 1, edits: ok };
       S.nextGroup = 1 + Math.max(0, ...Object.values(ok).map(e => e.g || 0));
     } catch (e) { /* unreadable saved changes are ignored; the prototype opens clean */ }
+    try {
+      const v = JSON.parse(store.getItem(S.lsKey + ':versions') || '[]');
+      if (Array.isArray(v)) S.versions = v.filter(x => x && typeof x.name === 'string' && x.model && x.model.edits && typeof x.model.edits === 'object').slice(0, 30).map(x => ({ name: x.name.slice(0, 24), model: { v: 1, edits: cleanEdits(x.model.edits) } }));
+    } catch (e) { S.versions = []; }
+  }
+  function cleanEdits(edits) {
+    const ok = {};
+    for (const k in edits) {
+      const e = edits[k]; if (!e || typeof e !== 'object' || !/^[np]:/.test(k)) continue;
+      const c = { name: String(e.name || 'Box').slice(0, 80) };
+      ['dx', 'dy', 'w', 'h', 'r', 'w0', 'h0', 'r0', 'g'].forEach(f => { if (Number.isFinite(e[f])) c[f] = e[f]; });
+      if (typeof e.note === 'string') c.note = e.note.slice(0, 500);
+      if (e.lock === true) c.lock = true;
+      ok[k] = c;
+    }
+    return ok;
   }
   function commit(name, fn) {
     const before = snapM();
@@ -244,8 +258,8 @@
     render();
   }
   function restore(st) { S.model = JSON.parse(st.m); S.sel = st.sel.map(elOf).filter(Boolean); S.key = st.key ? elOf(st.key) : null; applyAll(); save(); }
-  function undo() { S.err = ''; if (!S.undo.length) { S.status = 'Nothing to undo'; return render(); } const u = S.undo.pop(); S.redo.push({ name: u.name, st: snapM() }); restore(u.st); S.status = 'Undid ' + u.name.toLowerCase(); render(); }
-  function redo() { S.err = ''; if (!S.redo.length) { S.status = 'Nothing to redo'; return render(); } const u = S.redo.pop(); S.undo.push({ name: u.name, st: snapM() }); restore(u.st); S.status = 'Redid ' + u.name.toLowerCase(); render(); }
+  function undo() { S.err = ''; if (S.viewing >= 0) { S.err = 'Go back to Draft to undo'; return render(); } if (!S.undo.length) { S.status = 'Nothing to undo'; return render(); } const u = S.undo.pop(); S.redo.push({ name: u.name, st: snapM() }); restore(u.st); S.status = 'Undid ' + u.name.toLowerCase(); render(); }
+  function redo() { S.err = ''; if (S.viewing >= 0) { S.err = 'Go back to Draft to redo'; return render(); } if (!S.redo.length) { S.status = 'Nothing to redo'; return render(); } const u = S.redo.pop(); S.undo.push({ name: u.name, st: snapM() }); restore(u.st); S.status = 'Redid ' + u.name.toLowerCase(); render(); }
 
   /* ---------- controls panel ---------- */
   function groups() {
@@ -256,6 +270,7 @@
       { name: 'Motion', options: ['Normal', 'Slow', 'Reduce'], get: () => S.motion, set: i => { S.motion = i; applyMotion(); } },
       { name: 'View', options: ['Normal', 'Inspect', 'Skeleton'], get: () => S.view, set: i => setView(i) }
     ];
+    if (S.versions.length) g.push({ name: 'Version', options: ['Draft'].concat(S.versions.map(v => v.name)), get: () => S.viewing + 1, set: i => setViewing(i - 1) });
     S.opts.controls.forEach(c => g.push({ name: c.name, own: true, options: c.options, get: () => S.custom[c.name], set: i => { S.custom[c.name] = i; try { c.onChange && c.onChange(i, c.options[i]); } catch (e) { console.error(e); } if (S.view === 2) markText(); applyAll(); render(); } }));
     return g;
   }
@@ -264,7 +279,7 @@
     const shape = S.phone ? 'tab' : S.launcher;
     p.append(h('div', { class: 'kit-ph' },
       h('div', null, h('div', { class: 'kit-pt' }, 'Prototype controls'), h('div', { class: 'kit-ps' }, `not part of ${S.opts.app}`)),
-      h('button', { type: 'button', class: 'kit-min is-' + shape, 'aria-label': 'Minimise prototype controls', title: 'Minimise', onclick: () => setOpen(false) }, icon('min'))));
+      h('button', { type: 'button', class: 'kit-min is-' + shape, 'aria-label': 'Minimise prototype controls', 'data-tip': 'Minimise|Folds the controls away. Tap the launcher to bring them back|', onclick: () => setOpen(false) }, icon('min'))));
     const gs = groups();
     gs.forEach((g, gi) => {
       if (g.own && gi > 0 && !gs[gi - 1].own) p.append(h('div', { class: 'kit-sep' }));
@@ -379,22 +394,39 @@
       nameTag(ov, r, nameOf(S.hover), u, false);
     }
     if (sel.length === 1 && S.view === 1 && !S.ptr) boxModel(ov, sel[0]);
+    const multi = units().length > 1, keyM = multi && S.key ? members(S.key) : [];
+    for (const k in S.model.edits) { if (!S.model.edits[k].lock) continue; const el = elOf(k); if (el && el.isConnected) { const r = rectOf(el); ov.append(sv('rect', { x: r.x, y: r.y, width: Math.max(0, r.w), height: Math.max(0, r.h), fill: 'none', style: 'stroke:var(--fg2)', 'stroke-width': 1.2 * u, 'stroke-dasharray': `${1.5 * u} ${2.5 * u}` })); padlock(ov, r.x + 3 * u, r.y + 3 * u, u); } }
     sel.forEach(e => {
-      const r = rectOf(e), isKey = S.key && members(S.key).includes(e);
+      const r = rectOf(e), isKey = keyM.includes(e);
+      if (multi && !isKey) ov.append(sv('rect', { x: r.x, y: r.y, width: Math.max(0, r.w), height: Math.max(0, r.h), fill: 'rgba(0,122,255,.10)' }));
       ov.append(sv('rect', { x: r.x, y: r.y, width: Math.max(0, r.w), height: Math.max(0, r.h), fill: 'none', style: isKey ? 'stroke:var(--fg)' : 'stroke:' + BLUE, 'stroke-width': (isKey ? 2.5 : 1.5) * u }));
     });
+    if (multi && keyM.length) { const kb = bounds(keyM); keyTag(ov, kb, u); }
     if (units().length > 1) { const b = bounds(sel); ov.append(sv('rect', { x: b.x - 3 * u, y: b.y - 3 * u, width: b.w + 6 * u, height: b.h + 6 * u, fill: 'none', stroke: BLUE, 'stroke-width': u, 'stroke-dasharray': `${4 * u} ${3 * u}` })); }
     if (sel.length === 1 && !S.ptr) distances(ov, sel[0], u);
-    if (sel.length === 1 && !S.original) handles(ov, rectOf(sel[0]), u);
+    if (sel.length === 1 && !S.original && S.viewing < 0 && !isLocked(sel[0])) handles(ov, rectOf(sel[0]), u);
     if (sel.length) { const sb = bounds(sel); S.guides.forEach(g => guide(ov, g, sb, W, H, u)); }
     if (!S.original) changeList().forEach((c, i) => { if (c.el && c.el.isConnected) { const r = rectOf(c.el); pin(ov, r.x + r.w - 2 * u, r.y + 2 * u, i + 1, u); } });
-    if (sel.length === 1) nameTag(ov, rectOf(sel[0]), nameOf(sel[0]), u, true);
+    if (sel.length === 1) nameTag(ov, rectOf(sel[0]), nameOf(sel[0]) + (isLocked(sel[0]) ? ' · locked' : ''), u, true);
   }
   function nameTag(ov, r, txt, u, strong) {
     const t = txt.length > 30 ? txt.slice(0, 29) + '…' : txt, fs = 11 * u, w = (t.length * 6.3 + 12) * u, hh = 17 * u;
     let x = Math.max(2 * u, Math.min(r.x, scr().offsetWidth - w - 2 * u)), y = r.y - hh - 3 * u; if (y < 2 * u) y = r.y + r.h + 3 * u;
     ov.append(sv('rect', { x, y, width: w, height: hh, rx: 5 * u, fill: strong ? BLUE : '#1c1c1e', opacity: strong ? 1 : .85 }));
     ov.append(sv('text', { x: x + 6 * u, y: y + 12 * u, style: `font-size:${fs}px;fill:#fff;font-family:-apple-system,system-ui,sans-serif` }, t));
+  }
+  function keyTag(ov, r, u) {
+    const t = 'Key object', w = (t.length * 6.3 + 12) * u, hh = 17 * u;
+    let x = Math.max(2 * u, Math.min(r.x, scr().offsetWidth - w - 2 * u)), y = r.y - hh - 3 * u; if (y < 2 * u) y = r.y + r.h + 3 * u;
+    ov.append(sv('rect', { x, y, width: w, height: hh, rx: 5 * u, style: 'fill:var(--fg)' }));
+    ov.append(sv('text', { x: x + 6 * u, y: y + 12 * u, style: `font-size:${11 * u}px;fill:var(--bg);font-family:-apple-system,system-ui,sans-serif` }, t));
+  }
+  function padlock(ov, x, y, u) {
+    const g = sv('g', { transform: `translate(${x} ${y}) scale(${u})` });
+    g.append(sv('rect', { x: 0, y: 0, width: 16, height: 16, rx: 4, style: 'fill:var(--fg)', opacity: .85 }));
+    g.append(sv('path', { d: 'M5.5 7V5.6a2.5 2.5 0 015 0V7', fill: 'none', style: 'stroke:var(--bg)', 'stroke-width': 1.4 }));
+    g.append(sv('rect', { x: 4.2, y: 7, width: 7.6, height: 5.6, rx: 1.2, style: 'fill:var(--bg)' }));
+    ov.append(g);
   }
   function ring(ov, o, i, fill) {
     if (o.w <= 0 || o.h <= 0) return;
@@ -500,7 +532,11 @@
   function beginDrag(P) {
     const sel = liveSel();
     P.before = snapM(); P.T = targets(sel); S.hover = null;
-    if (P.mode === 'move') { P.bb = bounds(sel); P.starts = sel.map(el => { const e = peek(el) || {}; return [el, e.dx || 0, e.dy || 0]; }); }
+    if (P.mode === 'move') {
+      const mv = sel.filter(el => !isLocked(el)); P.skipped = sel.length - mv.length;
+      if (!mv.length) { P.mode = 'still'; P.why = LOCKED; return; }
+      P.bb = bounds(mv); P.starts = mv.map(el => { const e = peek(el) || {}; return [el, e.dx || 0, e.dy || 0]; });
+    }
     else { const el = sel[0], e = E(el), r = rectOf(el); P.el = el; P.r0 = r; P.dx0 = e.dx || 0; P.dy0 = e.dy || 0; if (e.w0 == null) e.w0 = Math.round(r.w * 10) / 10; if (e.h0 == null) e.h0 = Math.round(r.h * 10) / 10; P.w0 = r.w; P.h0 = r.h; }
   }
   function doMove(P, p, free) {
@@ -534,14 +570,18 @@
     S.err = ''; S.status = '';
     const t = P.target;
     if (!t) { if (!S.multi && !P.shift) { S.sel = []; S.key = null; } return; }
+    const now = Date.now(), dbl = S.lastTap && S.lastTap.el === t && now - S.lastTap.t < 380;
+    S.lastTap = dbl ? null : { el: t, t: now };
+    if (dbl && isLocked(t)) return unlockByDouble(t);
     const mem = P.deep ? [t] : members(t), sel = liveSel();
     if (P.shift || S.multi) {
       const all = mem.every(m => sel.includes(m));
       if (all) S.sel = sel.filter(x => !mem.includes(x)); else addToSel(mem);
-      if (S.key && !S.sel.includes(S.key)) S.key = null; return;
+      if (!S.key || !S.sel.includes(S.key)) S.key = S.sel[0] || null;
+      return;
     }
-    if (sel.includes(t) && units().length > 1) { S.key = S.key && members(S.key).includes(t) ? null : t; return; }
-    S.sel = mem; S.key = null;
+    if (sel.includes(t) && units().length > 1) { if (S.key !== t) S.status = nameOf(t) + ' is now the key object'; S.key = t; return; }
+    S.sel = mem; S.key = t;
   }
   function bindLayer() {
     const L = S.el.layer;
@@ -549,23 +589,24 @@
       if (ev.button > 0) return; ev.preventDefault();
       try { L.setPointerCapture(ev.pointerId); } catch (e) { }
       const p = pt(ev.clientX, ev.clientY), raw = hit(ev.clientX, ev.clientY), deep = ev.metaKey || ev.ctrlKey, target = pick(raw, deep), sel = liveSel();
-      const hd = sel.length === 1 && !S.original ? handleAt(rectOf(sel[0]), p) : null;
+      const hd = sel.length === 1 && !S.original && S.viewing < 0 && !isLocked(sel[0]) ? handleAt(rectOf(sel[0]), p) : null;
       let inSel = target && sel.some(s => s === target || s.contains(target)), pickedNow = false;
       // With a mouse, pressing on anything picks it straight away so it can be dragged (as in Illustrator).
       // With a finger, dragging something not yet picked scrolls the page instead.
-      if (!inSel && !hd && target && ev.pointerType === 'mouse' && !ev.shiftKey && !S.multi && !S.original) { S.sel = deep ? [target] : members(target); S.key = null; S.err = ''; S.status = ''; inSel = true; pickedNow = true; }
+      if (!inSel && !hd && target && ev.pointerType === 'mouse' && !ev.shiftKey && !S.multi && !S.original) { S.sel = deep ? [target] : members(target); S.key = target; S.err = ''; S.status = ''; inSel = true; pickedNow = true; }
       const P = { id: ev.pointerId, sx: ev.clientX, sy: ev.clientY, p0: p, target, deep, shift: ev.shiftKey, moved: false, hd, pickedNow };
-      P.mode = hd ? 'resize' : (inSel && !S.original ? 'move' : 'pan');
+      P.mode = hd ? 'resize' : (inSel ? (S.original || S.viewing >= 0 ? 'still' : 'move') : 'pan');
       P.scrollEl = scrollable(raw); P.st0 = P.scrollEl ? P.scrollEl.scrollTop : 0;
-      S.ptr = P; if (P.mode !== 'pan') beginDrag(P);
+      S.ptr = P; tipHide(true); if (P.mode === 'move' || P.mode === 'resize') beginDrag(P);
     });
     L.addEventListener('pointermove', ev => {
       const p = pt(ev.clientX, ev.clientY); S.cursor = { x: r1(p.x), y: r1(p.y) };
       const P = S.ptr;
-      if (!P) { if (ev.pointerType === 'mouse' && S.view === 1) S.hover = pick(hit(ev.clientX, ev.clientY), ev.metaKey || ev.ctrlKey); schedule(); return; }
+      if (!P) { if (ev.pointerType === 'mouse' && S.view > 0) { const hv = pick(hit(ev.clientX, ev.clientY), ev.metaKey || ev.ctrlKey); if (hv !== S.hover) { S.hover = S.view === 1 ? hv : null; boxTip(hv); } } schedule(); return; }
       if (ev.pointerId !== P.id) return;
       if (!P.moved && Math.hypot(ev.clientX - P.sx, ev.clientY - P.sy) < 4) return;
       P.moved = true;
+      if (P.mode === 'still') { const msg = P.why || (S.viewing >= 0 ? RO : 'Turn off Show original to make changes'); if (S.err !== msg) { S.err = msg; renderInsp(); } return; }
       if (P.mode === 'pan') { if (P.scrollEl) P.scrollEl.scrollTop = P.st0 - (ev.clientY - P.sy) / (S.scale || 1); schedule(); return; }
       const free = ev.altKey || !S.snap;
       if (P.mode === 'move') doMove(P, p, free); else doResize(P, p, free);
@@ -574,20 +615,20 @@
     const end = (ev, cancel) => {
       const P = S.ptr; if (!P || ev.pointerId !== P.id) return;
       S.ptr = null; S.guides = [];
-      if (P.moved && P.mode !== 'pan') {
+      if (P.moved && (P.mode === 'move' || P.mode === 'resize')) {
         prune(); applyAll();
+        if (P.skipped) S.status = `${P.skipped} locked ${P.skipped > 1 ? 'parts' : 'part'} stayed put`;
         if (P.before.m !== JSON.stringify(S.model)) { S.undo.push({ name: P.mode === 'move' ? 'Move' : 'Resize', st: P.before }); S.redo = []; save(); }
         return render();
       }
       if (P.mode === 'resize' && !P.moved) prune();
-      if (!P.moved && !cancel && !P.pickedNow) tapSelect(P);
+      if (!P.moved && !cancel) { if (P.pickedNow) S.lastTap = { el: P.target, t: Date.now() }; else tapSelect(P); }
       render();
     };
     L.addEventListener('pointerup', ev => end(ev, false));
     L.addEventListener('pointercancel', ev => end(ev, true));
-    L.addEventListener('dblclick', ev => { const t = hit(ev.clientX, ev.clientY); if (t) { S.sel = [t]; S.key = null; render(); } });
     L.addEventListener('wheel', ev => { const el = scrollable(hit(ev.clientX, ev.clientY)); if (el) { el.scrollTop += ev.deltaY; el.scrollLeft += ev.deltaX; ev.preventDefault(); schedule(); } }, { passive: false });
-    L.addEventListener('pointerleave', () => { if (!S.ptr) { S.cursor = null; S.hover = null; schedule(); } });
+    L.addEventListener('pointerleave', () => { if (!S.ptr) { S.cursor = null; S.hover = null; tipHide(false); schedule(); } });
     scr().addEventListener('pointermove', ev => { if (S.view === 0) { const p = pt(ev.clientX, ev.clientY); S.cursor = { x: r1(p.x), y: r1(p.y) }; schedule(); } }, { passive: true });
     scr().addEventListener('pointerleave', () => { if (S.view === 0) { S.cursor = null; schedule(); } });
     scr().addEventListener('scroll', schedule, true);
@@ -595,28 +636,35 @@
 
   /* ---------- arranging ---------- */
   function nudge(dx, dy) {
-    const sel = liveSel(); if (!sel.length || S.original) return;
+    const all = liveSel(); if (!all.length) return;
+    if (S.viewing >= 0) { S.err = RO; return render(); }
+    if (S.original) { S.err = 'Turn off Show original to make changes'; return render(); }
+    const sel = all.filter(el => !isLocked(el)); if (!sel.length) { S.err = LOCKED; return render(); }
     const now = Date.now(), chain = S.undo.length && S.undo[S.undo.length - 1].name === 'Nudge' && now - S.lastNudge < 1000 && !S.redo.length;
     S.lastNudge = now;
     const f = () => sel.forEach(el => { const e = E(el); e.dx = (e.dx || 0) + dx; e.dy = (e.dy || 0) + dy; });
     if (chain) { f(); prune(); applyAll(); save(); render(); } else commit('Nudge', f);
   }
-  function needSel(min) { const n = liveSel().length; if (!n) { S.err = 'Tap something on the screen first'; render(); return false; } if (S.original) { S.err = 'Turn off Show original to make changes'; render(); return false; } return true; }
+  function needSel(min) { const n = liveSel().length; if (!n) { S.err = 'Tap something on the screen first'; render(); return false; } if (S.viewing >= 0) { S.err = RO; render(); return false; } if (S.original) { S.err = 'Turn off Show original to make changes'; render(); return false; } return true; }
   function align(k) {
     S.err = ''; S.status = ''; if (!needSel()) return;
     const us = units(); let mode = S.alignTo, t;
     if (us.length === 1 && (mode === 'selection' || mode === 'key')) { mode = 'parent'; S.status = 'Only one picked, so it lined up with its parent'; }
-    if (mode === 'key') { if (!S.key) { S.err = 'Tap one of the picked boxes again to make it the key box'; return render(); } t = bounds(members(S.key)); }
+    if (mode === 'key') { if (!S.key) S.key = liveSel()[0]; t = bounds(members(S.key)); }
     else if (mode === 'screen') { const W = scr().offsetWidth, m = S.opts.margin; t = { x: m, y: 0, w: W - 2 * m, h: scr().offsetHeight }; }
     else if (mode === 'parent') { const p = liveSel()[0].parentElement; t = p && p !== S.root ? contentBox(p) : { x: 0, y: 0, w: scr().offsetWidth, h: scr().offsetHeight }; }
     else t = bounds(liveSel());
+    const lockedU = us.filter(u => u.some(isLocked) && !(mode === 'key' && u.includes(S.key))).length;
+    const st = mode === 'key' && us.length > 1 ? `Lined up with ${nameOf(S.key)}` : S.status;
     commit(AN[k], () => us.forEach(u => {
       if (mode === 'key' && u.includes(S.key)) return;
+      if (u.some(isLocked)) return;
       const ub = bounds(u); let dx = 0, dy = 0;
       if (k === 'l') dx = t.x - ub.x; if (k === 'c') dx = t.x + t.w / 2 - (ub.x + ub.w / 2); if (k === 'r') dx = t.x + t.w - (ub.x + ub.w);
       if (k === 't') dy = t.y - ub.y; if (k === 'm') dy = t.y + t.h / 2 - (ub.y + ub.h / 2); if (k === 'b') dy = t.y + t.h - (ub.y + ub.h);
       u.forEach(el => { const e = E(el); e.dx = Math.round(((e.dx || 0) + dx) * 100) / 100; e.dy = Math.round(((e.dy || 0) + dy) * 100) / 100; });
     }));
+    S.status = lockedU ? `${st ? st + '. ' : ''}${lockedU} locked ${lockedU > 1 ? 'parts' : 'part'} stayed put` : st; render();
   }
   function distribute(ax) {
     S.err = ''; S.status = ''; if (!needSel()) return;
@@ -627,8 +675,9 @@
     const P = ax === 'x' ? ['x', 'w', 'dx'] : ['y', 'h', 'dy'];
     const items = us.map(u => ({ u, b: bounds(u) })).sort((a, b) => a.b[P[0]] - b.b[P[0]]);
     if (gap === null) { const f = items[0].b, l = items[items.length - 1].b; gap = (l[P[0]] + l[P[1]] - f[P[0]] - items.reduce((a, i) => a + i.b[P[1]], 0)) / (items.length - 1); }
-    commit('Space out', () => { let pos = items[0].b[P[0]]; items.forEach(i => { const d = pos - i.b[P[0]]; i.u.forEach(el => { const e = E(el); e[P[2]] = Math.round(((e[P[2]] || 0) + d) * 100) / 100; }); pos += i.b[P[1]] + gap; }); });
-    S.status = 'Gaps of ' + fmt(gap); render();
+    commit('Space out', () => { let pos = items[0].b[P[0]]; items.forEach(i => { const d = pos - i.b[P[0]]; if (!i.u.some(isLocked)) i.u.forEach(el => { const e = E(el); e[P[2]] = Math.round(((e[P[2]] || 0) + d) * 100) / 100; }); pos += i.b[P[1]] + gap; }); });
+    const lk = items.filter(i => i.u.some(isLocked)).length;
+    S.status = 'Gaps of ' + fmt(gap) + (lk ? `. ${lk} locked ${lk > 1 ? 'parts' : 'part'} stayed put, so some gaps may differ` : ''); render();
   }
   function group() {
     S.err = ''; if (!needSel()) return; const us = units();
@@ -646,7 +695,8 @@
     S.err = ''; S.status = ''; if (!needSel()) return;
     const v = parseNum(raw); if (!v) { S.err = 'Enter a number, like 24, +8 or −8'; return render(); }
     const val = cur => v.rel === '+' ? cur + v.n : v.rel === '-' ? cur - v.n : v.n;
-    const sel = liveSel();
+    const sel = liveSel().filter(el => !isLocked(el));
+    if (!sel.length) { S.err = LOCKED; return render(); }
     if (f === 'x' || f === 'y') {
       const b = bounds(sel), d = val(b[f]) - b[f], prop = f === 'x' ? 'dx' : 'dy';
       commit(f === 'x' ? 'Move across' : 'Move down', () => sel.forEach(el => { const e = E(el); e[prop] = Math.round(((e[prop] || 0) + d) * 100) / 100; }));
@@ -716,6 +766,7 @@
     f.querySelectorAll('input').forEach(i => { if (vals[i.dataset.kf] != null && document.activeElement !== i) i.value = fmt(vals[i.dataset.kf]); });
   }
   function render() {
+    if (TIP.cur && !TIP.cur.isConnected) tipHide(true);
     renderInsp(); drawRulers(); drawOv();
   }
   function renderInsp() {
@@ -724,11 +775,14 @@
     if (S.view === 0) return;
     I.classList.toggle('shut', S.phone && S.inspShut);
     I.append(h('button', { type: 'button', class: 'kit-ihd', 'aria-expanded': String(!S.inspShut), onclick: () => { S.inspShut = !S.inspShut; render(); } }, 'Inspector', h('span', { class: 'kit-hint' }, S.inspShut ? 'Show' : 'Hide')));
-    const top = (stack, word, fn, ic) => h('button', { type: 'button', class: 'kit-ib' + (stack.length ? '' : ' no'), onclick: fn, title: word + (word === 'Undo' ? ' (⌘Z)' : ' (⇧⌘Z)') }, icon(ic), stack.length ? `${word} ${stack[stack.length - 1].name}` : word);
+    const top = (stack, word, fn, ic) => { const last = stack.length ? stack[stack.length - 1].name : ''; return h('button', { type: 'button', class: 'kit-ib' + (stack.length ? '' : ' no'), onclick: fn, 'data-tip': `${last ? word + ' ' + last : word}|${last ? (word === 'Undo' ? 'Takes back the last step' : 'Puts the step back') : 'Nothing to ' + word.toLowerCase() + ' yet'}|${word === 'Undo' ? '⌘Z' : '⇧⌘Z'}` }, icon(ic), last ? `${word} ${last}` : word); };
     I.append(h('div', { class: 'kit-ih' }, top(S.undo, 'Undo', undo, 'undo'), top(S.redo, 'Redo', redo, 'redo')));
+    if (S.viewing >= 0) I.append(h('div', { class: 'kit-ver' }, h('div', null, 'Viewing ', h('b', null, `“${S.versions[S.viewing].name}”`), ' · read-only'), h('div', { class: 'kit-ih', style: 'margin-top:6px' },
+      h('button', { type: 'button', class: 'kit-ib pri', onclick: makeDraft, 'data-tip': 'Make this the draft|Copies this version into the draft. Undo puts the old draft back|' }, 'Make this the draft'),
+      h('button', { type: 'button', class: 'kit-ib', onclick: () => setViewing(-1), 'data-tip': 'Back to draft|Carry on editing where you left off|' }, 'Back to draft'))));
     const sel = liveSel(), us = units();
     const secSel = h('div', { class: 'kit-sec' });
-    if (!sel.length) secSel.append(h('div', { class: 'kit-hint' }, 'Tap anything on the screen to inspect it. Shift-click, or turn on Select several, to pick more than one. ⌘-click or double-tap picks the smallest part.'));
+    if (!sel.length) secSel.append(h('div', { class: 'kit-hint' }, 'Tap anything on the screen to inspect it. Shift-click, or turn on Select several, to pick more: the first one you pick is the key object the others line up to. ⌘-click picks the smallest part.'));
     else {
       const el = sel[0];
       if (sel.length === 1) {
@@ -740,7 +794,9 @@
         secSel.append(cr);
       }
       const title = us.length === 1 ? (us[0].length > 1 ? `Group of ${us[0].length}` : nameOf(el)) : `${us.length} picked`;
-      secSel.append(h('div', { class: 'kit-name' }, title, S.key ? h('span', { class: 'kit-hint' }, ` · key: ${nameOf(S.key)}`) : ''));
+      secSel.append(h('div', { class: 'kit-name' }, title, S.key && us.length > 1 ? h('span', { class: 'kit-hint' }, ` · key object: ${nameOf(S.key)}`) : ''));
+      const nLocked = sel.filter(isLocked).length;
+      if (nLocked) secSel.append(h('div', { class: 'kit-hint', style: 'margin:-4px 0 8px' }, (sel.length === 1 ? 'Locked' : `${nLocked} of ${sel.length} locked`) + ' · double-click to unlock'));
       const b = bounds(sel), single = sel.length === 1;
       const field = (k, lab, v) => h('label', null, lab, h('input', { type: 'text', inputmode: 'decimal', 'data-kf': k, value: fmt(v), 'aria-label': lab, onchange: ev => applyField(k, ev.target.value), onkeydown: ev => { if (ev.key === 'Enter') { ev.preventDefault(); ev.target.blur(); } } }));
       const fields = h('div', { class: 'kit-fields' }, field('x', 'Left', b.x), field('y', 'Top', b.y));
@@ -762,32 +818,41 @@
         if (inf.tap) rows.append(row('Tap area', inf.tap.label, tick(inf.tap.ok), inf.tap.ok ? '' : h('span', { class: 'kit-hint' }, ' under 44')));
         secSel.append(rows);
         secSel.append(h('div', { class: 'kit-sh', style: 'margin-top:10px' }, 'Note'));
-        secSel.append(h('textarea', { class: 'kit-note', 'data-kf': 'note', placeholder: 'Something to change that isn’t a move, like “make this bolder”', 'aria-label': 'Note for ' + nameOf(el), onchange: ev => { if (S.original) { S.err = 'Turn off Show original to make changes'; return render(); } const v = ev.target.value.slice(0, 500); commit('Note', () => { E(el).note = v; }); } }, pe && pe.note ? pe.note : ''));
+        secSel.append(h('textarea', { class: 'kit-note', 'data-kf': 'note', placeholder: 'Something to change that isn’t a move, like “make this bolder”', 'aria-label': 'Note for ' + nameOf(el), onchange: ev => { if (S.viewing >= 0) { S.err = RO; return render(); } if (S.original) { S.err = 'Turn off Show original to make changes'; return render(); } const v = ev.target.value.slice(0, 500); commit('Note', () => { E(el).note = v; }); } }, pe && pe.note ? pe.note : ''));
       }
     }
     I.append(secSel);
 
     const ar = h('div', { class: 'kit-sec' }, h('div', { class: 'kit-sh' }, 'Arrange'));
-    const abtn = k => h('button', { type: 'button', class: 'kit-ic', 'aria-label': AN[k], title: AN[k], onclick: () => align(k) }, icon(k));
+    const ADESC = { l: 'left edge', c: 'centre, side to side', r: 'right edge', t: 'top', m: 'middle, top to bottom', b: 'bottom' };
+    const tgtWord = { key: 'the key object', selection: 'the outer edge of everything picked', parent: 'the parent', screen: 'the screen margins' }[S.alignTo];
+    const abtn = k => h('button', { type: 'button', class: 'kit-ic', 'aria-label': AN[k], 'data-tip': `${AN[k]}|Lines up with ${tgtWord}'s ${ADESC[k]}|`, onclick: () => align(k) }, icon(k));
     ar.append(h('div', { class: 'kit-ih' }, ['l', 'c', 'r', 't', 'm', 'b'].map(abtn)));
     ar.append(h('div', { class: 'kit-ih', style: 'margin-top:6px' },
-      h('button', { type: 'button', class: 'kit-ic', 'aria-label': 'Space out across', title: 'Space out across', onclick: () => distribute('x') }, icon('dx')),
-      h('button', { type: 'button', class: 'kit-ic', 'aria-label': 'Space out down', title: 'Space out down', onclick: () => distribute('y') }, icon('dy')),
+      h('button', { type: 'button', class: 'kit-ic', 'aria-label': 'Space out across', 'data-tip': 'Space out across|Even gaps side to side, or the gap you type|', onclick: () => distribute('x') }, icon('dx')),
+      h('button', { type: 'button', class: 'kit-ic', 'aria-label': 'Space out down', 'data-tip': 'Space out down|Even gaps top to bottom, or the gap you type|', onclick: () => distribute('y') }, icon('dy')),
       h('label', { class: 'kit-gap' }, 'Gap', h('input', { type: 'text', inputmode: 'decimal', placeholder: 'even', 'data-kf': 'gap', value: S.gapVal || '', oninput: ev => { S.gapVal = ev.target.value; S.err = ''; } }))));
     ar.append(h('div', { class: 'kit-gl' }, 'Line up with'));
-    ar.append(h('div', { class: 'kit-seg', role: 'group', 'aria-label': 'Line up with' }, [['selection', 'Selection'], ['key', 'Key box'], ['parent', 'Parent'], ['screen', 'Screen']].map(([v, l]) => h('button', { type: 'button', class: S.alignTo === v ? 'on' : '', 'aria-pressed': String(S.alignTo === v), onclick: () => { S.alignTo = v; S.err = ''; render(); } }, l))));
+    ar.append(h('div', { class: 'kit-seg', role: 'group', 'aria-label': 'Line up with' }, [['key', 'Key object'], ['selection', 'Selection'], ['parent', 'Parent'], ['screen', 'Screen']].map(([v, l]) => h('button', { type: 'button', class: S.alignTo === v ? 'on' : '', 'aria-pressed': String(S.alignTo === v), onclick: () => { S.alignTo = v; S.err = ''; render(); } }, l))));
     const oneGroup = us.length === 1 && us[0].length > 1;
     ar.append(h('div', { class: 'kit-ih', style: 'margin-top:8px' },
-      h('button', { type: 'button', class: 'kit-ib' + (S.multi ? ' on' : ''), 'aria-pressed': String(S.multi), onclick: () => { S.multi = !S.multi; render(); } }, 'Select several'),
-      h('button', { type: 'button', class: 'kit-ib', onclick: () => oneGroup ? ungroup() : group(), title: oneGroup ? 'Ungroup (⇧⌘G)' : 'Group (⌘G)' }, oneGroup ? 'Ungroup' : 'Group'),
-      h('button', { type: 'button', class: 'kit-ib' + (S.snap ? ' on' : ''), 'aria-pressed': String(S.snap), onclick: () => { S.snap = !S.snap; render(); } }, 'Smart snapping')));
+      h('button', { type: 'button', class: 'kit-ib' + (S.multi ? ' on' : ''), 'aria-pressed': String(S.multi), onclick: () => { S.multi = !S.multi; render(); }, 'data-tip': 'Select several|Taps add or remove boxes instead of starting again. The first one is the key object|Shift-click' }, 'Select several'),
+      h('button', { type: 'button', class: 'kit-ib', onclick: () => oneGroup ? ungroup() : group(), 'data-tip': oneGroup ? 'Ungroup|The boxes move on their own again|⇧⌘G' : 'Group|Picked boxes move and line up as one|⌘G' }, oneGroup ? 'Ungroup' : 'Group'),
+      (() => { const allL = sel.length && sel.every(isLocked); return h('button', { type: 'button', class: 'kit-ib', onclick: toggleLock, 'data-tip': allL ? 'Unlock|Lets the picked boxes move again. Double-clicking a locked box does the same|⇧⌘L' : "Lock|Picked boxes can't be moved, nudged or aligned. Double-click one to unlock it|⇧⌘L" }, allL ? 'Unlock' : 'Lock'); })(),
+      h('button', { type: 'button', class: 'kit-ib' + (S.snap ? ' on' : ''), 'aria-pressed': String(S.snap), onclick: () => { S.snap = !S.snap; render(); }, 'data-tip': 'Smart snapping|Dragged boxes click into line with edges, centres, margins and 16-point gaps. Hold Option to drag freely|' }, 'Smart snapping')));
     I.append(ar);
 
     const list = changeList(), ch = h('div', { class: 'kit-sec' }, h('div', { class: 'kit-sh' }, `Changes · ${list.length}`));
     ch.append(h('div', { class: 'kit-ih' },
-      h('button', { type: 'button', class: 'kit-ib pri', onclick: copyChanges }, S.copied === true ? 'Copied' : 'Copy changes'),
-      h('button', { type: 'button', class: 'kit-ib' + (S.original ? ' on' : ''), 'aria-pressed': String(S.original), onclick: () => { S.original = !S.original; applyAll(); render(); } }, 'Show original'),
-      h('button', { type: 'button', class: 'kit-ib', onclick: () => { if (!Object.keys(S.model.edits).length) { S.status = 'No changes yet'; return render(); } commit('Clear changes', () => { S.model.edits = {}; }); } }, 'Clear')));
+      h('button', { type: 'button', class: 'kit-ib pri', onclick: copyChanges, 'data-tip': 'Copy changes|A numbered list to paste into the chat, so every change is made in one go|' }, S.copied === true ? 'Copied' : 'Copy changes'),
+      h('button', { type: 'button', class: 'kit-ib' + (S.original ? ' on' : ''), 'aria-pressed': String(S.original), onclick: () => { S.original = !S.original; applyAll(); render(); }, 'data-tip': 'Show original|Before and after: hides your changes until you turn it off|' }, 'Show original'),
+      S.viewing < 0 ? h('button', { type: 'button', class: 'kit-ib', onclick: () => { S.saving = true; S.err = ''; render(); const i = S.el.insp.querySelector('[data-kf="vname"]'); i && i.focus(); }, 'data-tip': 'Save as version|Keeps this set of changes under a name, so you can flick back to it|' }, 'Save as version') : '',
+      S.viewing < 0 ? h('button', { type: 'button', class: 'kit-ib', onclick: () => { if (!Object.keys(S.model.edits).length) { S.status = 'No changes yet'; return render(); } commit('Clear changes', () => { S.model.edits = {}; }); }, 'data-tip': 'Clear|Removes every change from the draft. Undo brings them back|' }, 'Clear') : ''));
+    if (S.saving && S.viewing < 0) {
+      const inp = h('input', { type: 'text', 'data-kf': 'vname', placeholder: 'Name it, like Tighter rows', 'aria-label': 'Version name', maxlength: '24', onkeydown: ev => { if (ev.key === 'Enter') { ev.preventDefault(); saveVersion(ev.target.value); } if (ev.key === 'Escape') { S.saving = false; render(); } }, oninput: () => { if (S.err) { S.err = ''; const m = S.el.insp.querySelector('.kit-msg'); if (m) m.textContent = ''; } } });
+      ch.append(h('div', { class: 'kit-vform' }, inp, h('button', { type: 'button', class: 'kit-ib pri', onclick: () => saveVersion(inp.value) }, 'Save'), h('button', { type: 'button', class: 'kit-ib', onclick: () => { S.saving = false; render(); } }, 'Cancel')));
+    }
+    if (S.versions.length) ch.append(h('div', { class: 'kit-hint', style: 'margin-top:6px' }, `${S.versions.length} saved ${S.versions.length > 1 ? 'versions' : 'version'}. Flick between them under Version in the controls.`));
     if (S.original) ch.append(h('div', { class: 'kit-hint', style: 'margin-top:6px' }, 'Showing the original. Your changes are kept; turn this off to see them again.'));
     if (S.showText) {
       const t = changesText();
@@ -811,8 +876,95 @@
     det.addEventListener('toggle', () => { S.outlineOpen = det.open; });
     I.append(det);
     I.append(h('div', { class: 'kit-msg ' + (S.err ? 'err' : 'st'), role: 'status', 'aria-live': 'polite' }, S.err || S.status));
-    I.append(h('div', { class: 'kit-hint', style: 'margin-top:4px' }, 'Arrows nudge by 1, Shift + arrows by 10. Hold Option while dragging to skip snapping. Changes are kept on this device.'));
+    I.append(h('div', { class: 'kit-hint', style: 'margin-top:4px' }, 'Arrows nudge by 1, Shift + arrows by 10. Hold Option while dragging to skip snapping. Rest the pointer on a button for a tip. Changes and versions are kept on this device.'));
     if (keep) { const n = I.querySelector(`[data-kf="${keep.kf}"]`); if (n) { n.value = keep.v; n.focus({ preventScroll: true }); try { n.setSelectionRange(keep.a, keep.b); } catch (e) { } } }
+  }
+
+  /* ---------- versions and locking ---------- */
+  function setViewing(i) {
+    if (i === S.viewing || i >= S.versions.length) return;
+    if (S.viewing < 0 && i >= 0) S.draftModel = S.model;
+    S.model = i >= 0 ? JSON.parse(JSON.stringify(S.versions[i].model)) : S.draftModel;
+    if (i < 0) S.draftModel = null;
+    S.viewing = i; S.sel = []; S.key = null; S.err = ''; S.saving = false; S.showText = false; S.copied = null;
+    S.status = i >= 0 ? `Viewing “${S.versions[i].name}”. It can't be changed.` : '';
+    applyAll(); renderPanel(); render(); fire();
+  }
+  function saveVersion(name) {
+    S.err = ''; const n = String(name || '').trim();
+    if (S.viewing >= 0) { S.err = 'Go back to Draft to save a version'; return render(); }
+    if (!n) { S.err = 'Give the version a name first'; return render(); }
+    if (S.versions.some(v => v.name.toLowerCase() === n.toLowerCase())) { S.err = 'There is already a version with that name'; return render(); }
+    if (S.versions.length >= 30) { S.err = 'That’s 30 versions, the most the kit keeps'; return render(); }
+    S.versions.push({ name: n.slice(0, 24), model: JSON.parse(JSON.stringify(S.model)) });
+    saveVersions(); S.saving = false; S.status = `Saved “${n.slice(0, 24)}”. Keep editing the draft, or pick it under Version to look back.`;
+    renderPanel(); render(); fire(); return true;
+  }
+  function makeDraft() {
+    if (S.viewing < 0) return; const v = S.versions[S.viewing];
+    setViewing(-1);
+    commit('Restore version', () => { S.model.edits = JSON.parse(JSON.stringify(v.model.edits)); });
+    S.status = `The draft now matches “${v.name}”. Undo puts it back.`; render();
+  }
+  function toggleLock() {
+    S.err = ''; S.status = ''; if (!needSel()) return;
+    const sel = liveSel(), all = sel.every(isLocked);
+    commit(all ? 'Unlock' : 'Lock', () => sel.forEach(el => { if (all) { const e = peek(el); if (e) delete e.lock; } else E(el).lock = true; }));
+    S.status = all ? 'Unlocked' : 'Locked. You can still pick and inspect it, but not move it.'; render();
+  }
+  function unlockByDouble(t) {
+    if (S.viewing >= 0) { S.err = RO; return; }
+    const mem = members(t);
+    commit('Unlock', () => mem.forEach(m => { const e = peek(m); if (e) delete e.lock; }));
+    S.status = 'Unlocked ' + nameOf(t);
+  }
+
+  /* ---------- hover tips (mouse and trackpad only) ---------- */
+  const TIP = { el: null, timer: 0, warm: 0, cur: null };
+  function tipEl() { if (!TIP.el) { TIP.el = h('div', { class: 'kit-tip', role: 'tooltip' }); document.body.append(TIP.el); } return TIP.el; }
+  function tipShow(target, parts, rect) {
+    const el = tipEl(); el.textContent = '';
+    el.append(h('b', null, parts[0]));
+    if (parts[2]) el.append(h('span', { class: 'kit-tip-k' }, parts[2]));
+    if (parts[1]) el.append(h('span', { class: 'kit-tip-d' }, parts[1]));
+    el.style.left = '0px'; el.style.top = '0px'; el.classList.add('on');
+    const tw = el.offsetWidth, th = el.offsetHeight;
+    let x = rect.left + rect.width / 2 - tw / 2; x = Math.max(6, Math.min(x, window.innerWidth - tw - 6));
+    let y = rect.bottom + 6; if (y + th > window.innerHeight - 6) y = Math.max(6, rect.top - th - 6);
+    el.style.left = x + 'px'; el.style.top = y + 'px'; TIP.cur = target;
+  }
+  function tipSchedule(target, parts, rect) {
+    clearTimeout(TIP.timer);
+    const warm = TIP.cur || Date.now() < TIP.warm;
+    TIP.timer = setTimeout(() => { if (target.isConnected && (target.matches(':hover') || target === S.hover || (S.root.contains(target) && S.el.layer.matches(':hover')))) tipShow(target, parts(), rect()); }, warm ? 0 : 600);
+  }
+  function tipHide(hard) { clearTimeout(TIP.timer); if (TIP.el) TIP.el.classList.remove('on'); if (TIP.cur && !hard) TIP.warm = Date.now() + 1200; if (hard) TIP.warm = 0; TIP.cur = null; }
+  function bindTips() {
+    document.addEventListener('pointerover', ev => {
+      if (ev.pointerType !== 'mouse') return;
+      const t = ev.target.closest && ev.target.closest('[data-tip]');
+      if (!t || t === TIP.cur) return;
+      tipSchedule(t, () => t.getAttribute('data-tip').split('|'), () => t.getBoundingClientRect());
+    });
+    document.addEventListener('pointerout', ev => {
+      const t = ev.target.closest && ev.target.closest('[data-tip]');
+      if (t && !(ev.relatedTarget && t.contains(ev.relatedTarget))) tipHide(false);
+    });
+    document.addEventListener('pointerdown', () => tipHide(true), true);
+    document.addEventListener('pointermove', ev => { if (ev.pointerType !== 'mouse' || !TIP.cur) return; const c = TIP.cur; const over = S.root.contains(c) ? S.hover === c || (S.view > 1 && S.el.layer.matches(':hover') && pick(hit(ev.clientX, ev.clientY), false) === c) : (c.isConnected && c.matches(':hover')); if (!over) tipHide(false); }, { passive: true });
+    window.addEventListener('scroll', () => tipHide(true), true);
+  }
+  function boxTip(el) {
+    if (!el) return tipHide(false);
+    tipSchedule(el, () => {
+      const r = rectOf(el), bits = [`${fmt(r.w)} × ${fmt(r.h)}`];
+      const multi = units().length > 1;
+      if (multi && S.key && members(S.key).includes(el)) bits.push('key object: the others line up to this');
+      else if (multi && liveSel().includes(el)) bits.push('will move when you align');
+      if (isLocked(el)) bits.push('locked, double-click to unlock');
+      const e = peek(el); if (e && e.note) bits.push('note: ' + e.note.slice(0, 40));
+      return [nameOf(el), bits.join(' · '), ''];
+    }, () => el.getBoundingClientRect());
   }
 
   /* ---------- keyboard ---------- */
@@ -823,6 +975,7 @@
       const mod = ev.metaKey || ev.ctrlKey, k = (ev.key || '').toLowerCase();
       if (mod && k === 'z' && !typing) { ev.preventDefault(); return ev.shiftKey ? redo() : undo(); }
       if (typing) return;
+      if (mod && ev.shiftKey && k === 'l') { ev.preventDefault(); return toggleLock(); }
       if (mod && k === 'g') { ev.preventDefault(); return ev.shiftKey ? ungroup() : group(); }
       if (ev.key === 'Escape') { S.sel = []; S.key = null; return render(); }
       const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
@@ -840,7 +993,7 @@
     S.opts.controls.forEach(c => { S.custom[c.name] = c.value || 0; });
     document.body.classList.add('kit');
     const el = S.el;
-    el.launcher = h('button', { type: 'button', 'aria-label': 'Open prototype controls', title: 'Prototype controls', onclick: () => setOpen(true) });
+    el.launcher = h('button', { type: 'button', 'aria-label': 'Open prototype controls', 'data-tip': 'Prototype controls|Device, look, motion, view and this prototype’s own states|', onclick: () => setOpen(true) });
     el.panel = h('div', { class: 'kit-panel', role: 'region', 'aria-label': 'Prototype controls' });
     el.rt = sv('svg', { class: 'kit-ruler', 'aria-hidden': 'true' }); el.rl = sv('svg', { class: 'kit-ruler', 'aria-hidden': 'true' });
     el.screen = h('div', { class: 'kit-screen is-iphone' });
@@ -854,7 +1007,7 @@
     const canvas = h('div', { class: 'kit-canvas' }, el.rt, el.rl, el.box);
     document.body.append(h('div', { class: 'kit-stage' }, el.launcher, el.panel, canvas, el.insp));
     S.open = !(window.innerWidth <= 600);
-    load(); applyLook(); applyMotion(); bindLayer(); bindKeys();
+    load(); applyLook(); applyMotion(); bindLayer(); bindKeys(); bindTips();
     renderPanel(); layout(); applyAll(); render();
     let rz = 0; window.addEventListener('resize', () => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { layout(); renderPanel(); render(); }); });
     let mt = 0; new MutationObserver(() => { clearTimeout(mt); mt = setTimeout(() => { if (S.view === 2) markText(); applyAll(); schedule(); }, 30); }).observe(root, { childList: true, subtree: true });
@@ -871,13 +1024,15 @@
     setLauncher(shape) { S.launcher = shape; renderLauncher(); renderPanel(); },
     changesText, undo, redo, align, distribute, group, ungroup, nudge, field: applyField,
     setAlignTo(v) { S.alignTo = v; render(); },
+    lock: toggleLock, saveVersion, view: setViewing, makeDraft, versions: () => S.versions.map(v => v.name),
+    tap(name, shift) { const el = S.root.querySelector('[data-name="' + CSS.escape(name) + '"]'); if (!el) return false; tapSelect({ target: el, shift: !!shift, deep: false }); render(); return true; },
     setGap(v) { S.gapVal = String(v); },
     clear() { commit('Clear changes', () => { S.model.edits = {}; }); },
     original(v) { S.original = !!v; applyAll(); render(); },
     refresh() { applyAll(); render(); },
     k: () => (S.motion === 1 ? 4 : 1),
     reduced: () => S.motion === 2,
-    state: () => ({ edits: JSON.parse(JSON.stringify(S.model.edits)), undo: S.undo.map(u => u.name), redo: S.redo.map(u => u.name), sel: liveSel().map(nameOf), scale: S.scale, phone: S.phone, open: S.open })
+    state: () => ({ key: S.key ? nameOf(S.key) : null, viewing: S.viewing, edits: JSON.parse(JSON.stringify(S.model.edits)), undo: S.undo.map(u => u.name), redo: S.redo.map(u => u.name), sel: liveSel().map(nameOf), scale: S.scale, phone: S.phone, open: S.open })
   };
   window.Kit = api;
 })();
