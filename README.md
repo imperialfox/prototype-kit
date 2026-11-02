@@ -4,6 +4,8 @@
 
 **Current version:** 1.0.0 · 2 Nov 2026 · [changelog](CHANGELOG.md)
 
+*Prototyping, but with a bit more power and manual adjustment that's intuitive.*
+
 One shared kit for clickable app prototypes. Write the screens; the kit brings everything around them: the device frame, the controls panel, an inspector, and editing tools that turn your tweaks into one exact list of changes. It belongs to no app, so any prototype for any app can start from it.
 
 ## What's in it
