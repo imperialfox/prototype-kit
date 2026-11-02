@@ -15,12 +15,19 @@ body.kit button{font:inherit;color:inherit}
 .kit-stage{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:center;gap:16px;padding:12px;box-sizing:border-box;min-height:100vh}
 
 /* Launcher and controls panel */
-.kit-launcher{position:fixed;top:12px;left:12px;z-index:51;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--k-card);border:1px solid var(--k-line);color:var(--k-fg);cursor:pointer;padding:0;box-shadow:0 4px 14px rgba(0,0,0,.12);transition:opacity .2s,transform .25s cubic-bezier(.3,1.3,.5,1)}
+.kit-dock{position:fixed;top:12px;left:12px;z-index:51;display:flex;align-items:center;gap:8px;transform-origin:top left;transition:opacity .2s,transform .25s cubic-bezier(.3,1.3,.5,1)}
+.kit-dock.hid{opacity:0;transform:scale(.6);pointer-events:none}
+.kit-dock.is-tab{left:0;top:40%;flex-direction:column;align-items:flex-start;gap:6px}
+.kit-launcher{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--k-card);border:1px solid var(--k-line);color:var(--k-fg);cursor:pointer;padding:0;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+.kit-ins{display:flex;align-items:center;gap:6px;height:36px;padding:0 13px;border-radius:999px;background:var(--k-card);border:1px solid var(--k-line);color:var(--k-fg);cursor:pointer;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+.kit-ins.on,.kit-ins-p.on{background:var(--k-acc);border-color:var(--k-acc);color:#fff}
+.kit-ins.is-tab{width:22px;height:44px;padding:0;justify-content:center;border-radius:0 12px 12px 0;border-left:0}
+.kit-ins-p{flex:none;display:flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:999px;border:0;background:var(--k-fill);cursor:pointer;font-size:12px;margin-left:auto}
+.kit-ins-p + .kit-min{margin-left:6px}
 .kit-launcher.is-circle{width:40px;height:40px;border-radius:50%}
 .kit-launcher.is-square{width:40px;height:40px;border-radius:11px}
 .kit-launcher.is-capsule{height:36px;padding:0 14px;border-radius:999px;font-size:13px}
-.kit-launcher.is-tab{left:0;top:40%;width:22px;height:64px;border-radius:0 12px 12px 0;border-left:0}
-.kit-launcher.hid{opacity:0;transform:scale(.6);pointer-events:none}
+.kit-launcher.is-tab{width:22px;height:64px;border-radius:0 12px 12px 0;border-left:0}
 .kit-panel{flex:none;width:262px;background:var(--k-card);border:1px solid var(--k-line);border-radius:16px;padding:10px 12px 12px;box-sizing:border-box;transform-origin:top left;transition:transform .28s cubic-bezier(.3,1.2,.5,1),opacity .2s;z-index:50;position:sticky;top:12px}
 .kit-narrow .kit-panel{position:fixed;top:12px;left:12px;max-height:calc(100vh - 24px);overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.2)}
 .kit-panel.shut{position:fixed;top:12px;left:12px;transform:scale(.1);opacity:0;pointer-events:none}
@@ -133,6 +140,9 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
 .kit-vform{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
 .kit-vform input{flex:1;min-width:140px;height:30px;border:1px solid var(--k-line);border-radius:8px;background:var(--k-bg);color:var(--k-fg);padding:0 8px;font:inherit;font-size:16px}
 
+.kit-launcher:focus,.kit-ins:focus{outline:none}
+.kit-launcher:focus-visible,.kit-ins:focus-visible,.kit-ins-p:focus-visible{outline:2px solid var(--k-acc);outline-offset:2px}
+
 </style>
 <style>
 /* The demo app: a sample Suki screen. Only this part is written per prototype. */
@@ -234,7 +244,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
   const AN = { l: 'Align left', c: 'Align centre', r: 'Align right', t: 'Align top', m: 'Align middle', b: 'Align bottom' };
 
   const S = {
-    opts: null, root: null, el: {}, device: 'iphone', look: 0, motion: 0, view: 0, custom: {},
+    opts: null, root: null, el: {}, device: 'iphone', look: 0, motion: 0, inspect: true, skel: false, custom: {},
     phone: false, open: true, launcher: 'circle', scale: 1,
     sel: [], key: null, multi: false, snap: true, alignTo: 'key', original: false, versions: [], viewing: -1, draftModel: null, saving: false, lastTap: null,
     model: { v: 1, edits: {} }, undo: [], redo: [], lastNudge: 0, nextGroup: 1,
@@ -282,6 +292,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       case 'b': L(2, 14, 14, 14); R(4, 3, 3, 9); R(9, 6, 3, 6); break;
       case 'dx': L(2, 2, 2, 14); L(14, 2, 14, 14); R(5, 5, 2, 6); R(9, 5, 2, 6); break;
       case 'dy': L(2, 2, 14, 2); L(2, 14, 14, 14); R(5, 5, 6, 2); R(5, 9, 6, 2); break;
+      case 'insp': s.appendChild(sv('path', { d: 'M2.5 6V3.5a1 1 0 011-1H6M10 2.5h2.5a1 1 0 011 1V6M2.5 10v2.5a1 1 0 001 1H6' })); P('M8.5 8.5l5.5 2-2.3.9-.9 2.3z'); break;
       case 'undo': P('M5 3.5L2 6.5l3 3M2 6.5h8a4 4 0 010 8H8'); break;
       case 'redo': P('M11 3.5l3 3-3 3M14 6.5H6a4 4 0 000 8h2'); break;
     }
@@ -487,10 +498,10 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       { name: 'Device', options: devs.map(d => DEV[d].label), get: () => devs.indexOf(S.device), set: i => setDevice(devs[i]) },
       { name: 'Look', options: ['Light', 'Dark'], get: () => S.look, set: i => { S.look = i; applyLook(); render(); } },
       { name: 'Motion', options: ['Normal', 'Slow', 'Reduce'], get: () => S.motion, set: i => { S.motion = i; applyMotion(); } },
-      { name: 'View', options: ['Normal', 'Inspect', 'Skeleton'], get: () => S.view, set: i => setView(i) }
+      { name: 'View', options: ['Normal', 'Skeleton'], get: () => (S.skel ? 1 : 0), set: i => setSkel(i === 1) }
     ];
     if (S.versions.length) g.push({ name: 'Version', options: ['Draft'].concat(S.versions.map(v => v.name)), get: () => S.viewing + 1, set: i => setViewing(i - 1) });
-    S.opts.controls.forEach(c => g.push({ name: c.name, own: true, options: c.options, get: () => S.custom[c.name], set: i => { S.custom[c.name] = i; try { c.onChange && c.onChange(i, c.options[i]); } catch (e) { console.error(e); } if (S.view === 2) markText(); applyAll(); render(); } }));
+    S.opts.controls.forEach(c => g.push({ name: c.name, own: true, options: c.options, get: () => S.custom[c.name], set: i => { S.custom[c.name] = i; try { c.onChange && c.onChange(i, c.options[i]); } catch (e) { console.error(e); } if (S.skel) markText(); applyAll(); render(); } }));
     return g;
   }
   function renderPanel() {
@@ -498,6 +509,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     const shape = S.phone ? 'tab' : S.launcher;
     p.append(h('div', { class: 'kit-ph' },
       h('div', null, h('div', { class: 'kit-pt' }, 'Prototype controls'), h('div', { class: 'kit-ps' }, `not part of ${S.opts.app}`)),
+      inspBtn('kit-ins-p'),
       h('button', { type: 'button', class: 'kit-min is-' + shape, 'aria-label': 'Minimise prototype controls', 'data-tip': 'Minimise|Folds the controls away. Tap the launcher to bring them back|', onclick: () => setOpen(false) }, icon('min'))));
     const gs = groups();
     gs.forEach((g, gi) => {
@@ -511,22 +523,34 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
   }
   function renderLauncher() {
     const shape = S.phone ? 'tab' : S.launcher, l = S.el.launcher;
-    l.className = 'kit-launcher is-' + shape + (S.open ? ' hid' : '');
+    l.className = 'kit-launcher is-' + shape;
     l.textContent = '';
     l.append(icon(shape === 'tab' ? 'chev' : 'sliders'));
     if (shape === 'capsule') l.append(h('span', null, 'Controls'));
     S.el.panel.classList.toggle('shut', !S.open);
     S.el.panel.setAttribute('aria-hidden', String(!S.open));
+    renderDock();
   }
   function setOpen(v) { S.open = v; renderLauncher(); renderPanel(); layout(); if (v) { const b = S.el.panel.querySelector('button'); b && b.focus({ preventScroll: true }); } else S.el.launcher.focus({ preventScroll: true }); }
   function fire() { window.dispatchEvent(new CustomEvent('kit:change', { detail: api.get() })); }
   function applyLook() { scr().classList.toggle('dark', S.look === 1); scr().style.colorScheme = S.look ? 'dark' : 'light'; buildTokenMap(); }
   function applyMotion() { scr().style.setProperty('--k', S.motion === 1 ? '4' : '1'); scr().classList.toggle('motion-reduced', S.motion === 2); }
   function setDevice(d) { S.device = d; ['iphone', 'ipad', 'mac'].forEach(x => scr().classList.toggle('is-' + x, x === d)); layout(); applyAll(); render(); }
-  function setView(i) {
-    S.view = i; document.body.classList.toggle('kit-edit', i > 0); scr().classList.toggle('kit-skel', i === 2);
-    if (i === 2) markText(); if (i === 0) { S.hover = null; S.ptr = null; S.guides = []; }
-    layout(); render();
+  function setSkel(v) { S.skel = !!v; scr().classList.toggle('kit-skel', S.skel); if (S.skel) markText(); render(); }
+  function setInspect(v) {
+    S.inspect = !!v; document.body.classList.toggle('kit-edit', S.inspect);
+    if (!S.inspect) { S.hover = null; S.ptr = null; S.guides = []; tipHide(true); }
+    if (store) try { store.setItem('kit:prefs', JSON.stringify({ inspect: S.inspect })); } catch (e) { }
+    renderDock(); renderPanel(); layout(); render(); fire();
+  }
+  function renderDock() {
+    const shape = S.phone ? 'tab' : S.launcher;
+    S.el.dock.className = 'kit-dock is-' + shape + (S.open ? ' hid' : '');
+    const b = S.el.inspBtn; b.className = 'kit-ins is-' + shape + (S.inspect ? ' on' : ''); b.setAttribute('aria-pressed', String(S.inspect)); b.textContent = '';
+    b.append(icon('insp')); if (shape !== 'tab') b.append(h('span', null, 'Inspect'));
+  }
+  function inspBtn(cls) {
+    return h('button', { type: 'button', class: cls + (S.inspect ? ' on' : ''), 'aria-pressed': String(S.inspect), 'aria-label': 'Inspect', onclick: () => setInspect(!S.inspect), 'data-tip': 'Inspect|' + (S.inspect ? 'On: taps pick parts to inspect and adjust. Turn off to use the prototype normally' : 'Off: the prototype works normally. Turn on to inspect and adjust parts') + '|I' }, icon('insp'), h('span', null, 'Inspect'));
   }
   function markText() { S.root.querySelectorAll('*').forEach(el => { if ([...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) el.classList.add('kit-txt'); }); }
 
@@ -546,7 +570,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       const b = d.b;
       sc_.style.width = d.w + 'px'; sc_.style.height = d.h + 'px'; sc_.style.borderRadius = Math.max(0, d.r - b) + 'px';
       dv.style.borderWidth = b + 'px'; dv.style.borderRadius = d.r + 'px';
-      const side = (S.open && wide ? 278 : 0) + (S.view > 0 && wide ? 316 : 0);
+      const side = (S.open && wide ? 278 : 0) + (S.inspect && wide ? 316 : 0);
       const availW = Math.max(220, window.innerWidth - 24 - side - 56);
       const availH = Math.max(320, window.innerHeight - 24 - 26);
       const s = Math.max(0.2, Math.min(1, availW / (d.w + 2 * b), availH / (d.h + 2 * b)));
@@ -584,7 +608,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       rl.append(sv('line', { y1: y, y2: y, x1: LW, x2: LW - L, style: tick }));
       if (v % 100 === 0 && v && v < H - 8) rl.append(sv('text', { x: LW - 11, y: y + 4, 'text-anchor': 'end', style: lab }, v));
     }
-    const sel = S.view > 0 ? liveSel() : [];
+    const sel = S.inspect ? liveSel() : [];
     if (sel.length) {
       const b = bounds(sel), acc = 'fill:var(--k-acc)';
       rt.append(sv('rect', { x: b.x * s, y: 0, width: Math.max(0, b.w * s), height: TH, style: 'fill:var(--k-acc);opacity:.16' }));
@@ -603,16 +627,16 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
   /* ---------- overlay on the screen ---------- */
   function drawOv() {
     const ov = S.el.ov; ov.textContent = '';
-    if (S.view === 0) return;
     const W = scr().offsetWidth, H = scr().offsetHeight, u = 1 / (S.scale || 1);
     ov.setAttribute('width', W); ov.setAttribute('height', H); ov.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    if (!S.inspect) { if (!S.original) changeList().forEach((c, i) => { if (c.e.note && c.el && c.el.isConnected) { const r = inkRect(c.el); bubble(ov, r.x + r.w + 6 * u, r.y + 2 * u, i + 1, u); } }); return; }
     const sel = liveSel();
     if (S.hover && !sel.includes(S.hover) && S.hover.isConnected) {
       const r = rectOf(S.hover);
       ov.append(sv('rect', { x: r.x, y: r.y, width: Math.max(0, r.w), height: Math.max(0, r.h), fill: 'rgba(0,122,255,.08)', stroke: BLUE, 'stroke-width': u }));
       nameTag(ov, r, nameOf(S.hover), u, false);
     }
-    if (sel.length === 1 && S.view === 1 && !S.ptr) boxModel(ov, sel[0]);
+    if (sel.length === 1 && !S.skel && !S.ptr) boxModel(ov, sel[0]);
     const multi = units().length > 1, keyM = multi && S.key ? members(S.key) : [];
     for (const k in S.model.edits) { if (!S.model.edits[k].lock) continue; const el = elOf(k); if (el && el.isConnected) { const r = rectOf(el); ov.append(sv('rect', { x: r.x, y: r.y, width: Math.max(0, r.w), height: Math.max(0, r.h), fill: 'none', style: 'stroke:var(--fg2)', 'stroke-width': 1.2 * u, 'stroke-dasharray': `${1.5 * u} ${2.5 * u}` })); padlock(ov, r.x + 3 * u, r.y + 3 * u, u); } }
     sel.forEach(e => {
@@ -625,7 +649,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     if (sel.length === 1 && !S.ptr) distances(ov, sel[0], u);
     if (sel.length === 1 && !S.original && S.viewing < 0 && !isLocked(sel[0])) handles(ov, rectOf(sel[0]), u);
     if (sel.length) { const sb = bounds(sel); S.guides.forEach(g => guide(ov, g, sb, W, H, u)); }
-    if (!S.original) changeList().forEach((c, i) => { if (c.el && c.el.isConnected) { const r = rectOf(c.el); pin(ov, r.x + r.w - 2 * u, r.y + 2 * u, i + 1, u); } });
+    if (!S.original) changeList().forEach((c, i) => { if (c.el && c.el.isConnected) { if (c.e.note) { const r = inkRect(c.el); bubble(ov, r.x + r.w + 6 * u, r.y + 2 * u, i + 1, u); } else { const r = rectOf(c.el); pin(ov, r.x + r.w - 2 * u, r.y + 2 * u, i + 1, u); } } });
     if (sel.length === 1) nameTag(ov, rectOf(sel[0]), nameOf(sel[0]) + (isLocked(sel[0]) ? ' · locked' : ''), u, true);
   }
   function nameTag(ov, r, txt, u, strong) {
@@ -697,6 +721,18 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
   function pin(ov, x, y, n, u) {
     ov.append(sv('circle', { cx: x, cy: y, r: 8 * u, fill: '#1c1c1e', stroke: '#fff', 'stroke-width': 1.5 * u }));
     ov.append(sv('text', { x, y: y + 3.8 * u, 'text-anchor': 'middle', style: `font-size:${11 * u}px;font-weight:600;fill:#fff;font-family:-apple-system,system-ui,sans-serif` }, n));
+  }
+  function inkRect(el) {
+    // Where the part's content actually sits (the end of a heading's text, not the edge of its full-width box).
+    const r = rectOf(el);
+    try { const rg = document.createRange(); rg.selectNodeContents(el); const a = rg.getBoundingClientRect(), b = sRect(), s = sc(); if (a.width > 4 && a.height > 4) { const c = { x: (a.left - b.left) / s, y: (a.top - b.top) / s, w: a.width / s, h: a.height / s }; if (c.w < r.w - 1) return c; } } catch (e) { }
+    return r;
+  }
+  function bubble(ov, x, y, n, u) {
+    const g = sv('g', { class: 'kit-bubble', transform: `translate(${x - 11 * u} ${y - 10 * u}) scale(${u})` });
+    g.append(sv('path', { d: 'M5 0h12a5 5 0 015 5v6a5 5 0 01-5 5H9l-5 4v-4.3A5 5 0 010 11V5a5 5 0 015-5z', fill: '#ffd60a', stroke: '#fff', 'stroke-width': 1.5 }));
+    g.append(sv('text', { x: 11, y: 11.6, 'text-anchor': 'middle', style: 'font-size:11px;font-weight:700;fill:#1c1c1e;font-family:-apple-system,system-ui,sans-serif' }, n));
+    ov.append(g);
   }
   function schedule() { if (S.raf) return; S.raf = requestAnimationFrame(() => { S.raf = 0; drawRulers(); drawOv(); }); }
 
@@ -821,7 +857,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     L.addEventListener('pointermove', ev => {
       const p = pt(ev.clientX, ev.clientY); S.cursor = { x: r1(p.x), y: r1(p.y) };
       const P = S.ptr;
-      if (!P) { if (ev.pointerType === 'mouse' && S.view > 0) { const hv = pick(hit(ev.clientX, ev.clientY), ev.metaKey || ev.ctrlKey); if (hv !== S.hover) { S.hover = S.view === 1 ? hv : null; boxTip(hv); } } schedule(); return; }
+      if (!P) { if (ev.pointerType === 'mouse' && S.inspect) { const hv = pick(hit(ev.clientX, ev.clientY), ev.metaKey || ev.ctrlKey); if (hv !== S.hover) { S.hover = !S.skel ? hv : null; boxTip(hv); } } schedule(); return; }
       if (ev.pointerId !== P.id) return;
       if (!P.moved && Math.hypot(ev.clientX - P.sx, ev.clientY - P.sy) < 4) return;
       P.moved = true;
@@ -848,8 +884,8 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     L.addEventListener('pointercancel', ev => end(ev, true));
     L.addEventListener('wheel', ev => { const el = scrollable(hit(ev.clientX, ev.clientY)); if (el) { el.scrollTop += ev.deltaY; el.scrollLeft += ev.deltaX; ev.preventDefault(); schedule(); } }, { passive: false });
     L.addEventListener('pointerleave', () => { if (!S.ptr) { S.cursor = null; S.hover = null; tipHide(false); schedule(); } });
-    scr().addEventListener('pointermove', ev => { if (S.view === 0) { const p = pt(ev.clientX, ev.clientY); S.cursor = { x: r1(p.x), y: r1(p.y) }; schedule(); } }, { passive: true });
-    scr().addEventListener('pointerleave', () => { if (S.view === 0) { S.cursor = null; schedule(); } });
+    scr().addEventListener('pointermove', ev => { if (!S.inspect) { const p = pt(ev.clientX, ev.clientY); S.cursor = { x: r1(p.x), y: r1(p.y) }; schedule(); } }, { passive: true });
+    scr().addEventListener('pointerleave', () => { if (!S.inspect) { S.cursor = null; schedule(); } });
     scr().addEventListener('scroll', schedule, true);
   }
 
@@ -991,7 +1027,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
   function renderInsp() {
     const I = S.el.insp, act = document.activeElement, keep = act && I.contains(act) && act.dataset && act.dataset.kf ? { kf: act.dataset.kf, v: act.value, a: act.selectionStart, b: act.selectionEnd } : null;
     I.textContent = '';
-    if (S.view === 0) return;
+    if (!S.inspect) return;
     I.classList.toggle('shut', S.phone && S.inspShut);
     I.append(h('button', { type: 'button', class: 'kit-ihd', 'aria-expanded': String(!S.inspShut), onclick: () => { S.inspShut = !S.inspShut; render(); } }, 'Inspector', h('span', { class: 'kit-hint' }, S.inspShut ? 'Show' : 'Hide')));
     const top = (stack, word, fn, ic) => { const last = stack.length ? stack[stack.length - 1].name : ''; return h('button', { type: 'button', class: 'kit-ib' + (stack.length ? '' : ' no'), onclick: fn, 'data-tip': `${last ? word + ' ' + last : word}|${last ? (word === 'Undo' ? 'Takes back the last step' : 'Puts the step back') : 'Nothing to ' + word.toLowerCase() + ' yet'}|${word === 'Undo' ? '⌘Z' : '⇧⌘Z'}` }, icon(ic), last ? `${word} ${last}` : word); };
@@ -1170,7 +1206,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       if (t && !(ev.relatedTarget && t.contains(ev.relatedTarget))) tipHide(false);
     });
     document.addEventListener('pointerdown', () => tipHide(true), true);
-    document.addEventListener('pointermove', ev => { if (ev.pointerType !== 'mouse' || !TIP.cur) return; const c = TIP.cur; const over = S.root.contains(c) ? S.hover === c || (S.view > 1 && S.el.layer.matches(':hover') && pick(hit(ev.clientX, ev.clientY), false) === c) : (c.isConnected && c.matches(':hover')); if (!over) tipHide(false); }, { passive: true });
+    document.addEventListener('pointermove', ev => { if (ev.pointerType !== 'mouse' || !TIP.cur) return; const c = TIP.cur; const over = S.root.contains(c) ? S.hover === c || (S.skel && S.el.layer.matches(':hover') && pick(hit(ev.clientX, ev.clientY), false) === c) : (c.isConnected && c.matches(':hover')); if (!over) tipHide(false); }, { passive: true });
     window.addEventListener('scroll', () => tipHide(true), true);
   }
   function boxTip(el) {
@@ -1189,9 +1225,10 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
   /* ---------- keyboard ---------- */
   function bindKeys() {
     document.addEventListener('keydown', ev => {
-      if (S.view === 0) return;
       const tg = ev.target, typing = tg && (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA' || tg.isContentEditable);
       const mod = ev.metaKey || ev.ctrlKey, k = (ev.key || '').toLowerCase();
+      if (!typing && !mod && !ev.altKey && k === 'i') { ev.preventDefault(); return setInspect(!S.inspect); }
+      if (!S.inspect) return;
       if (mod && k === 'z' && !typing) { ev.preventDefault(); return ev.shiftKey ? redo() : undo(); }
       if (typing) return;
       if (mod && ev.shiftKey && k === 'l') { ev.preventDefault(); return toggleLock(); }
@@ -1214,6 +1251,8 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     const el = S.el;
     el.launcher = h('button', { type: 'button', 'aria-label': 'Open prototype controls', 'data-tip': 'Prototype controls|Device, look, motion, view and this prototype’s own states|', onclick: () => setOpen(true) });
     el.panel = h('div', { class: 'kit-panel', role: 'region', 'aria-label': 'Prototype controls' });
+    el.inspBtn = h('button', { type: 'button', 'aria-label': 'Inspect', onclick: () => setInspect(!S.inspect), 'data-tip': 'Inspect|Taps pick parts to inspect and adjust. Turn off to use the prototype normally|I' });
+    el.dock = h('div', { class: 'kit-dock' }, el.launcher, el.inspBtn);
     el.rt = sv('svg', { class: 'kit-ruler', 'aria-hidden': 'true' }); el.rl = sv('svg', { class: 'kit-ruler', 'aria-hidden': 'true' });
     el.screen = h('div', { class: 'kit-screen is-iphone' });
     el.layer = h('div', { class: 'kit-layer', 'aria-hidden': 'true' });
@@ -1224,18 +1263,20 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     root.classList.add('kit-root');
     el.screen.append(root, el.ov, el.layer);
     const canvas = h('div', { class: 'kit-canvas' }, el.rt, el.rl, el.box);
-    document.body.append(h('div', { class: 'kit-stage' }, el.launcher, el.panel, canvas, el.insp));
+    document.body.append(h('div', { class: 'kit-stage' }, el.dock, el.panel, canvas, el.insp));
     S.open = !(window.innerWidth <= 600);
-    load(); applyLook(); applyMotion(); bindLayer(); bindKeys(); bindTips();
+    load(); try { const pr = store && JSON.parse(store.getItem('kit:prefs') || '{}'); if (pr && typeof pr.inspect === 'boolean') S.inspect = pr.inspect; } catch (e) { }
+    document.body.classList.toggle('kit-edit', S.inspect);
+    applyLook(); applyMotion(); bindLayer(); bindKeys(); bindTips();
     renderPanel(); layout(); applyAll(); render();
     let rz = 0; window.addEventListener('resize', () => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { layout(); renderPanel(); render(); }); });
-    let mt = 0; new MutationObserver(() => { clearTimeout(mt); mt = setTimeout(() => { if (S.view === 2) markText(); applyAll(); schedule(); }, 30); }).observe(root, { childList: true, subtree: true });
+    let mt = 0; new MutationObserver(() => { clearTimeout(mt); mt = setTimeout(() => { if (S.skel) markText(); applyAll(); schedule(); }, 30); }).observe(root, { childList: true, subtree: true });
     return api;
   }
 
   const api = {
     start,
-    get: () => ({ device: S.device, look: S.look, motion: S.motion, view: S.view, custom: Object.assign({}, S.custom) }),
+    get: () => ({ device: S.device, look: S.look, motion: S.motion, inspect: S.inspect, skeleton: S.skel, custom: Object.assign({}, S.custom) }),
     set(name, i) { const g = groups().find(x => x.name === name); if (!g) throw new Error('Kit: no control called ' + name); g.set(i); renderPanel(); fire(); },
     groups: () => groups().map(g => ({ name: g.name, options: g.options.slice() })),
     select(q) { const list = (Array.isArray(q) ? q : [q]).map(x => typeof x === 'string' ? S.root.querySelector('[data-name="' + CSS.escape(x) + '"]') : x).filter(Boolean); S.sel = list; S.key = null; render(); return list.length; },
@@ -1243,6 +1284,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     setLauncher(shape) { S.launcher = shape; renderLauncher(); renderPanel(); },
     changesText, undo, redo, align, distribute, group, ungroup, nudge, field: applyField,
     setAlignTo(v) { S.alignTo = v; render(); },
+    inspect: v => setInspect(v !== false), note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
     lock: toggleLock, saveVersion, view: setViewing, makeDraft, versions: () => S.versions.map(v => v.name),
     tap(name, shift) { const el = S.root.querySelector('[data-name="' + CSS.escape(name) + '"]'); if (!el) return false; tapSelect({ target: el, shift: !!shift, deep: false }); render(); return true; },
     setGap(v) { S.gapVal = String(v); },

@@ -1,6 +1,6 @@
 # Prototype kit · scripts (2 Nov 2026)
 
-Kept here until the kit has its own repo. `kit.css` and `kit.js` live inside the published [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793638198-6571): its `<style id="kit-css">` and `<script id="kit-js">` blocks are the two files, word for word. The demo page is the same page with those two blocks swapped for `<link rel="stylesheet" href="kit.css">` and `<script src="kit.js"></script>`.
+Kept here until the kit has its own repo. `kit.css` and `kit.js` live inside the published [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793638630-3f11): its `<style id="kit-css">` and `<script id="kit-js">` blocks are the two files, word for word. The demo page is the same page with those two blocks swapped for `<link rel="stylesheet" href="kit.css">` and `<script src="kit.js"></script>`.
 
 ## tools/bundle.py
 
@@ -120,12 +120,20 @@ def main():
                     page.evaluate("([n, i]) => Kit.set(n, i)", [g["name"], i])
                     page.wait_for_timeout(120)
                     check(f"{g['name']} {opt}")
-                    if (g["name"], opt) in [("Look", "Dark"), ("Device", "iPad"), ("View", "Inspect"), ("View", "Skeleton")] or (g["name"] == "Look" and opt == "Light"):
+                    if (g["name"], opt) in [("Look", "Dark"), ("Device", "iPad"), ("View", "Skeleton")] or (g["name"] == "Look" and opt == "Light"):
                         page.screenshot(path=str(shots / f"{label}_{g['name']}_{opt}.png".replace(" ", "_")))
                 page.evaluate("([n]) => Kit.set(n, 0)", [g["name"]])
 
+            # Inspect is its own switch: on by default, can be turned off and back on
+            if not page.evaluate("Kit.get().inspect"):
+                problems.append(f"{label}: Inspect should start on")
+            for v, name in [(False, "Inspect off"), (True, "Inspect on")]:
+                page.evaluate("v => Kit.inspect(v)", v)
+                page.wait_for_timeout(120)
+                check(name)
+                page.screenshot(path=str(shots / f"{label}_{name.replace(' ', '_')}.png"))
             # Editing tools
-            page.evaluate("Kit.set('View', 1)")
+            page.evaluate("Kit.inspect(true)")
             names = page.evaluate("[...document.querySelectorAll('.kit-root [data-name]')].map(e => e.dataset.name)")
             target = names[2] if len(names) > 2 else names[0]
             ok = page.evaluate("n => Kit.select(n)", target)
@@ -234,7 +242,15 @@ def main():
             page.evaluate("Kit.original(true)")
             check("show original")
             page.evaluate("Kit.original(false)")
-            page.evaluate("Kit.set('View', 2)")
+            # A note shows as a bubble even with Inspect off
+            page.evaluate("n => { Kit.select(n); Kit.note('Make this bolder'); }", names[1])
+            page.evaluate("Kit.inspect(false)")
+            if not page.evaluate("!!document.querySelector('.kit-ov .kit-bubble')"):
+                problems.append(f"{label}: no note bubble with Inspect off")
+            page.screenshot(path=str(shots / f"{label}_note_bubble_inspect_off.png"))
+            check("note bubble, inspect off")
+            page.evaluate("Kit.inspect(true)")
+            page.evaluate("Kit.set('View', 1)")
             page.wait_for_timeout(100)
             page.screenshot(path=str(shots / f"{label}_skeleton_with_changes.png"))
             check("skeleton with changes")
