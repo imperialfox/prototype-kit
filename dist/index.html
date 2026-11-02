@@ -313,13 +313,15 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     return parts.join('.');
   }
   function keyOf(el) {
+    if (el.dataset && el.dataset.kitDup) return 'd:' + el.dataset.kitDup;
     const n = el.getAttribute && el.getAttribute('data-name');
     if (n && S.root.querySelectorAll('[data-name="' + CSS.escape(n) + '"]').length === 1) return 'n:' + n;
     return 'p:' + pathOf(el);
   }
   function elOf(k) {
     if (!k) return null;
-    if (k.startsWith('n:')) return S.root.querySelector('[data-name="' + CSS.escape(k.slice(2)) + '"]');
+    if (k.startsWith('d:')) return S.root.querySelector('[data-kit-dup="' + CSS.escape(k.slice(2)) + '"]');
+    if (k.startsWith('n:')) return S.root.querySelector('[data-name="' + CSS.escape(k.slice(2)) + '"]:not([data-kit-dup])');
     let e = S.root;
     for (const i of k.slice(2).split('.')) { if (i === '') continue; e = e && e.children[+i]; }
     return e && e !== S.root ? e : null;
@@ -387,7 +389,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       if (e.note != null && !String(e.note).trim()) delete e.note;
       if (!e.g) delete e.g;
       if (!e.lock) delete e.lock;
-      if (!e.dx && !e.dy && e.w == null && e.h == null && e.r == null && !e.note && !e.g && !e.lock) delete ed[k];
+      if (!e.dx && !e.dy && e.w == null && e.h == null && e.r == null && !e.note && !e.g && !e.lock && !e.dup) delete ed[k];
     }
   }
   function applyEl(el, e) {
@@ -403,7 +405,29 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     st.height = on && e.h != null ? e.h + 'px' : o.height;
     st.borderRadius = on && e.r != null ? e.r + 'px' : o.borderRadius;
   }
+  function makeClone(src, id, name) {
+    const c = src.cloneNode(true);
+    c.removeAttribute('id'); c.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
+    c.querySelectorAll('[data-name],[data-kit-dup]').forEach(n => { n.removeAttribute('data-name'); n.removeAttribute('data-kit-dup'); });
+    c.setAttribute('data-name', name); c.dataset.kitDup = id; c.setAttribute('aria-hidden', 'true'); c.classList.add('kit-copy');
+    const o = src.__kitOrig || {}, st = c.style;
+    st.translate = o.translate || ''; st.position = 'absolute'; st.left = src.offsetLeft + 'px'; st.top = src.offsetTop + 'px';
+    st.width = src.offsetWidth + 'px'; st.height = src.offsetHeight + 'px'; st.margin = '0'; st.boxSizing = 'border-box'; st.zIndex = '1';
+    src.after(c); return c;
+  }
+  function syncDups() {
+    // Copies made with Option-drag live in the model, so undo, versions and reloads bring them back or take them away.
+    const want = new Set();
+    for (const k in S.model.edits) {
+      const e = S.model.edits[k]; if (!e.dup) continue;
+      const id = k.slice(2); want.add(id);
+      if (S.root.querySelector('[data-kit-dup="' + CSS.escape(id) + '"]')) continue;
+      const src = elOf(e.dup.of); if (src instanceof HTMLElement) makeClone(src, id, e.name);
+    }
+    S.root.querySelectorAll('[data-kit-dup]').forEach(c => { if (!want.has(c.dataset.kitDup)) { S.touched.delete(c); c.remove(); } });
+  }
   function applyAll() {
+    syncDups();
     const seen = new Set();
     for (const k in S.model.edits) { const el = elOf(k); if (el) { seen.add(el); S.touched.add(el); applyEl(el, S.model.edits[k]); } }
     S.touched.forEach(el => { if (!seen.has(el)) { applyEl(el, null); if (!el.isConnected) S.touched.delete(el); } });
@@ -424,7 +448,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     const out = [];
     for (const k in S.model.edits) {
       const e = S.model.edits[k];
-      if (!e.dx && !e.dy && e.w == null && e.h == null && e.r == null && !e.note) continue;
+      if (!e.dx && !e.dy && e.w == null && e.h == null && e.r == null && !e.note && !e.dup) continue;
       const el = elOf(k);
       out.push({ k, e, el, r: el ? rectOf(el) : { x: 0, y: 1e9 } });
     }
@@ -443,8 +467,14 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     const lines = [`Changes to the ${S.opts.app} prototype${S.opts.title ? ' (' + S.opts.title + ')' : ''}${vn}, ${d}`, 'Measured in iPhone points.', ''];
     list.forEach((c, i) => {
       const e = c.e, parts = [], mv = [];
-      if (e.dx) mv.push((e.dx > 0 ? 'right ' : 'left ') + fmt(Math.abs(e.dx)));
-      if (e.dy) mv.push((e.dy > 0 ? 'down ' : 'up ') + fmt(Math.abs(e.dy)));
+      if (e.dup) {
+        const se = S.model.edits[e.dup.of] || {}, ox = (e.dx || 0) - (se.dx || 0), oy = (e.dy || 0) - (se.dy || 0), om = [];
+        if (ox) om.push((ox > 0 ? 'right ' : 'left ') + fmt(Math.abs(ox))); if (oy) om.push((oy > 0 ? 'down ' : 'up ') + fmt(Math.abs(oy)));
+        parts.push(`add a copy of ${e.dup.ofName}, ` + (om.length ? 'placed ' + om.join(', ') + ' from it' : 'on top of it'));
+      } else {
+        if (e.dx) mv.push((e.dx > 0 ? 'right ' : 'left ') + fmt(Math.abs(e.dx)));
+        if (e.dy) mv.push((e.dy > 0 ? 'down ' : 'up ') + fmt(Math.abs(e.dy)));
+      }
       if (mv.length) parts.push('move ' + mv.join(', '));
       if (e.w != null) parts.push(`width ${fmt(e.w0)} → ${fmt(e.w)}`);
       if (e.h != null) parts.push(`height ${fmt(e.h0)} → ${fmt(e.h)}`);
@@ -478,11 +508,13 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
   function cleanEdits(edits) {
     const ok = {};
     for (const k in edits) {
-      const e = edits[k]; if (!e || typeof e !== 'object' || !/^[np]:/.test(k)) continue;
+      const e = edits[k]; if (!e || typeof e !== 'object' || !/^[npd]:/.test(k)) continue;
       const c = { name: String(e.name || 'Box').slice(0, 80) };
       ['dx', 'dy', 'w', 'h', 'r', 'w0', 'h0', 'r0', 'g'].forEach(f => { if (Number.isFinite(e[f])) c[f] = e[f]; });
       if (typeof e.note === 'string') c.note = e.note.slice(0, 500);
       if (e.lock === true) c.lock = true;
+      if (k.startsWith('d:') && e.dup && typeof e.dup.of === 'string') c.dup = { of: e.dup.of.slice(0, 300), ofName: String(e.dup.ofName || 'a part').slice(0, 80) };
+      if (k.startsWith('d:') && !c.dup) continue;
       ok[k] = c;
     }
     return ok;
@@ -798,6 +830,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     ov.append(sv('text', { x, y: y + 4 * u, 'text-anchor': 'middle', style: `font-size:${11 * u}px;fill:#fff;font-family:-apple-system,system-ui,sans-serif` }, txt));
   }
   function guide(ov, g, sb, W, H, u) {
+    if (g.a === 'note') { tagPill(ov, Math.min(W - 44 * u, Math.max(44 * u, sb.x + sb.w / 2)), Math.min(H - 12 * u, sb.y + sb.h + 14 * u), g.t, u); return; }
     if (g.a === 'x') { ov.append(sv('line', { x1: g.v, x2: g.v, y1: 0, y2: H, stroke: PINK, 'stroke-width': u })); tagPill(ov, Math.min(W - 40 * u, Math.max(40 * u, g.v)), Math.max(12 * u, sb.y - 14 * u), g.t, u); }
     else if (g.a === 'y') { ov.append(sv('line', { x1: 0, x2: W, y1: g.v, y2: g.v, stroke: PINK, 'stroke-width': u })); tagPill(ov, Math.min(W - 44 * u, sb.x + sb.w + 40 * u), g.v, g.t, u); }
     else { const cx = sb.x + sb.w / 2; ov.append(sv('line', { x1: cx, x2: cx, y1: g.v1, y2: g.v2, stroke: PINK, 'stroke-width': 1.5 * u })); tagPill(ov, cx + 30 * u, (g.v1 + g.v2) / 2, g.t, u); }
@@ -878,10 +911,13 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     }
     else { const el = sel[0], e = E(el), r = rectOf(el); P.el = el; P.r0 = r; P.dx0 = e.dx || 0; P.dy0 = e.dy || 0; if (e.w0 == null) e.w0 = Math.round(r.w * 10) / 10; if (e.h0 == null) e.h0 = Math.round(r.h * 10) / 10; P.w0 = r.w; P.h0 = r.h; }
   }
-  function doMove(P, p, free) {
-    const dx = p.x - P.p0.x, dy = p.y - P.p0.y;
+  function doMove(P, p, free, straight) {
+    let dx = p.x - P.p0.x, dy = p.y - P.p0.y, axis = null;
+    if (straight) { if (Math.abs(dx) >= Math.abs(dy)) { dy = 0; axis = 'h'; } else { dx = 0; axis = 'v'; } }
     let q = { x: P.bb.x + r1(dx), y: P.bb.y + r1(dy) };
     if (!free) { const s = snapBox(P, P.bb.x + dx, P.bb.y + dy, P.bb.w, P.bb.h); q = { x: s.sx ? s.x : P.bb.x + r1(dx), y: s.sy ? s.y : P.bb.y + r1(dy) }; } else S.guides = [];
+    if (axis === 'h') { q.y = P.bb.y; S.guides = S.guides.filter(g => g.a === 'x'); S.guides.push({ a: 'note', t: 'Across only' }); }
+    if (axis === 'v') { q.x = P.bb.x; S.guides = S.guides.filter(g => g.a === 'y' || g.a === 'g'); S.guides.push({ a: 'note', t: 'Down only' }); }
     const mx = q.x - P.bb.x, my = q.y - P.bb.y;
     P.starts.forEach(([el, x0, y0]) => { const e = E(el); e.dx = Math.round((x0 + mx) * 100) / 100; e.dy = Math.round((y0 + my) * 100) / 100; applyEl(el, e); S.touched.add(el); });
   }
@@ -900,6 +936,35 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     if (hd.l || hd.r) e.dx = Math.round(((e.dx || 0) + (L - a.x)) * 100) / 100;
     if (hd.t || hd.b) e.dy = Math.round(((e.dy || 0) + (T - a.y)) * 100) / 100;
     applyEl(el, e);
+  }
+  function nextDupId() { return String(1 + Math.max(0, ...Object.keys(S.model.edits).filter(k => k.startsWith('d:')).map(k => parseInt(k.slice(2), 10) || 0))); }
+  function copyName(src) {
+    const base = nameOf(src).replace(/ copy( \d+)?$/, ''); let name = base + ' copy', n = 2;
+    while (S.root.querySelector('[data-name="' + CSS.escape(name) + '"]')) name = base + ' copy ' + (n++);
+    return name;
+  }
+  function startDup(P) {
+    const made = [];
+    P.starts.forEach(([src]) => {
+      if (!(src instanceof HTMLElement)) return;
+      const id = nextDupId(), se = peek(src) || {};
+      S.model.edits['d:' + id] = { name: copyName(src), dup: { of: keyOf(src), ofName: nameOf(src) }, dx: se.dx || 0, dy: se.dy || 0 };
+      made.push(id);
+    });
+    if (!made.length) { S.status = "That part can't be copied"; return; }
+    syncDups();
+    const clones = made.map(id => elOf('d:' + id)).filter(Boolean);
+    clones.forEach(c => { applyEl(c, S.model.edits[keyOf(c)]); S.touched.add(c); });
+    S.sel = clones; S.key = clones[0]; P.duped = true;
+    P.starts = clones.map(c => { const e = peek(c) || {}; return [c, e.dx || 0, e.dy || 0]; });
+    P.T = targets(clones);
+  }
+  function removeCopies() {
+    S.err = ''; S.status = ''; const sel = liveSel(); if (!sel.length) return;
+    if (S.viewing >= 0) { S.err = RO; return render(); }
+    const copies = sel.filter(el => keyOf(el).startsWith('d:'));
+    if (!copies.length) { S.err = 'Only copies you made can be deleted here. Add a note to ask for a part to be removed'; return render(); }
+    commit(copies.length > 1 ? 'Delete copies' : 'Delete copy', () => { copies.forEach(c => { delete S.model.edits[keyOf(c)]; }); S.sel = []; S.key = null; });
   }
   function addToSel(mem) {
     let sel = liveSel().filter(s => !mem.some(m => m.contains(s) || s.contains(m)));
@@ -944,11 +1009,12 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       if (!P) { if (ev.pointerType === 'mouse' && S.inspect) { const hv = pick(hit(ev.clientX, ev.clientY), ev.metaKey || ev.ctrlKey); if (hv !== S.hover) { S.hover = !S.skel ? hv : null; boxTip(hv); } } schedule(); return; }
       if (ev.pointerId !== P.id) return;
       if (!P.moved && Math.hypot(ev.clientX - P.sx, ev.clientY - P.sy) < 4) return;
+      if (!P.moved && P.mode === 'move' && ev.altKey) startDup(P);
       P.moved = true;
       if (P.mode === 'still') { const msg = P.why || (S.viewing >= 0 ? RO : 'Turn off Show original to make changes'); if (S.err !== msg) { S.err = msg; renderInsp(); } return; }
       if (P.mode === 'pan') { if (P.scrollEl) P.scrollEl.scrollTop = P.st0 - (ev.clientY - P.sy) / (S.scale || 1); schedule(); return; }
-      const free = ev.altKey || !S.snap;
-      if (P.mode === 'move') doMove(P, p, free); else doResize(P, p, free);
+      const free = ev.metaKey || ev.ctrlKey || !S.snap;
+      if (P.mode === 'move') doMove(P, p, free, ev.shiftKey); else doResize(P, p, free);
       schedule(); renderLive();
     });
     const end = (ev, cancel) => {
@@ -957,7 +1023,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       if (P.moved && (P.mode === 'move' || P.mode === 'resize')) {
         prune(); applyAll();
         if (P.skipped) S.status = `${P.skipped} locked ${P.skipped > 1 ? 'parts' : 'part'} stayed put`;
-        if (P.before.m !== JSON.stringify(S.model)) { S.undo.push({ name: P.mode === 'move' ? 'Move' : 'Resize', st: P.before }); S.redo = []; save(); }
+        if (P.before.m !== JSON.stringify(S.model)) { S.undo.push({ name: P.duped ? 'Duplicate' : P.mode === 'move' ? 'Move' : 'Resize', st: P.before }); S.redo = []; save(); }
         return render();
       }
       if (P.mode === 'resize' && !P.moved) prune();
@@ -1143,7 +1209,8 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       secSel.append(fields);
       const pe = single ? peek(el) : null;
       const moved = sel.reduce((a, s) => { const e = peek(s); return a || (e && (e.dx || e.dy)); }, false);
-      if (moved && us.length === 1) { const e = peek(el) || {}; const mv = []; if (e.dx) mv.push((e.dx > 0 ? 'right ' : 'left ') + fmt(Math.abs(e.dx))); if (e.dy) mv.push((e.dy > 0 ? 'down ' : 'up ') + fmt(Math.abs(e.dy))); if (mv.length) secSel.append(h('div', { class: 'kit-hint', style: 'margin-top:6px;color:var(--k-acc)' }, 'Moved ' + mv.join(', '))); }
+      if (us.length === 1 && single && (peek(el) || {}).dup) { const e = peek(el), se = S.model.edits[e.dup.of] || {}, ox = (e.dx || 0) - (se.dx || 0), oy = (e.dy || 0) - (se.dy || 0), mv = []; if (ox) mv.push((ox > 0 ? 'right ' : 'left ') + fmt(Math.abs(ox))); if (oy) mv.push((oy > 0 ? 'down ' : 'up ') + fmt(Math.abs(oy))); secSel.append(h('div', { class: 'kit-hint', style: 'margin-top:6px;color:var(--k-acc)' }, `A copy of ${e.dup.ofName}` + (mv.length ? `, ${mv.join(', ')} from it` : ', on top of it') + '. Delete removes it.')); }
+      else if (moved && us.length === 1) { const e = peek(el) || {}; const mv = []; if (e.dx) mv.push((e.dx > 0 ? 'right ' : 'left ') + fmt(Math.abs(e.dx))); if (e.dy) mv.push((e.dy > 0 ? 'down ' : 'up ') + fmt(Math.abs(e.dy))); if (mv.length) secSel.append(h('div', { class: 'kit-hint', style: 'margin-top:6px;color:var(--k-acc)' }, 'Moved ' + mv.join(', '))); }
       if (single) {
         const inf = info(el), rows = h('div', { style: 'margin-top:8px' });
         rows.append(h('div', { class: 'kit-boxd', 'aria-label': 'Box sizes' }, 'margin ' + inf.box.m, h('div', { class: 'p' }, 'padding ' + inf.box.p, h('div', { class: 'c' }, `${fmt(b.w)} × ${fmt(b.h)}`))));
@@ -1178,7 +1245,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       h('button', { type: 'button', class: 'kit-ib' + (S.multi ? ' on' : ''), 'aria-pressed': String(S.multi), onclick: () => { S.multi = !S.multi; render(); }, 'data-tip': 'Select several|Taps add or remove boxes instead of starting again. The first one is the key object|Shift-click' }, 'Select several'),
       h('button', { type: 'button', class: 'kit-ib', onclick: () => oneGroup ? ungroup() : group(), 'data-tip': oneGroup ? 'Ungroup|The boxes move on their own again|⇧⌘G' : 'Group|Picked boxes move and line up as one|⌘G' }, oneGroup ? 'Ungroup' : 'Group'),
       (() => { const allL = sel.length && sel.every(isLocked); return h('button', { type: 'button', class: 'kit-ib', onclick: toggleLock, 'data-tip': allL ? 'Unlock|Lets the picked boxes move again. Double-clicking a locked box does the same|⇧⌘L' : "Lock|Picked boxes can't be moved, nudged or aligned. Double-click one to unlock it|⇧⌘L" }, allL ? 'Unlock' : 'Lock'); })(),
-      h('button', { type: 'button', class: 'kit-ib' + (S.snap ? ' on' : ''), 'aria-pressed': String(S.snap), onclick: () => { S.snap = !S.snap; render(); }, 'data-tip': 'Smart snapping|Dragged boxes click into line with edges, centres, margins and 16-point gaps. Hold Option to drag freely|' }, 'Smart snapping')));
+      h('button', { type: 'button', class: 'kit-ib' + (S.snap ? ' on' : ''), 'aria-pressed': String(S.snap), onclick: () => { S.snap = !S.snap; render(); }, 'data-tip': 'Smart snapping|Dragged boxes click into line with edges, centres, margins and 16-point gaps. Hold ⌘ to drag freely|' }, 'Smart snapping')));
     I.append(ar);
 
     const list = changeList(), ch = h('div', { class: 'kit-sec' }, h('div', { class: 'kit-sh' }, `Changes · ${list.length}`));
@@ -1215,7 +1282,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     det.addEventListener('toggle', () => { S.outlineOpen = det.open; });
     I.append(det);
     I.append(h('div', { class: 'kit-msg ' + (S.err ? 'err' : 'st'), role: 'status', 'aria-live': 'polite' }, S.err || S.status));
-    I.append(h('div', { class: 'kit-hint', style: 'margin-top:4px' }, 'Click outside the phone, or press Esc or ⇧⌘A, to deselect. Arrows nudge by 1, Shift + arrows by 10. Hold Option while dragging to skip snapping. Rest the pointer on a button for a tip. Changes and versions are kept on this device.'));
+    I.append(h('div', { class: 'kit-hint', style: 'margin-top:4px' }, 'Click outside the phone, or press Esc or ⇧⌘A, to deselect. Arrows nudge by 1, Shift + arrows by 10. Shift while dragging moves straight across or down; Option drags a copy; ⌘ skips snapping. Delete removes a copy. Rest the pointer on a button for a tip. Changes and versions are kept on this device.'));
     if (keep) { const n = I.querySelector(`[data-kf="${keep.kf}"]`); if (n) { n.value = keep.v; n.focus({ preventScroll: true }); try { n.setSelectionRange(keep.a, keep.b); } catch (e) { } } }
   }
 
@@ -1330,6 +1397,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       if (mod && ev.shiftKey && k === 'l') { ev.preventDefault(); return toggleLock(); }
       if (mod && k === 'g') { ev.preventDefault(); return ev.shiftKey ? ungroup() : group(); }
       if (ev.key === 'Escape' || (mod && ev.shiftKey && k === 'a')) { ev.preventDefault(); return deselect(); }
+      if ((ev.key === 'Backspace' || ev.key === 'Delete') && liveSel().length) { ev.preventDefault(); return removeCopies(); }
       const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
       if (!d || !liveSel().length) return;
       ev.preventDefault(); const n = ev.shiftKey ? 10 : 1; nudge(d[0] * n, d[1] * n);
@@ -1380,7 +1448,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     setLauncher(shape) { S.launcher = shape; renderLauncher(); renderPanel(); },
     changesText, undo, redo, align, distribute, group, ungroup, nudge, field: applyField,
     setAlignTo(v) { S.alignTo = v; render(); },
-    inspect: v => setInspect(v !== false), deselect, onion(i, depth) { S.onion = i; if (depth) S.onionDepth = depth; savePrefs(); renderPanel(); render(); }, note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
+    inspect: v => setInspect(v !== false), deselect, removeCopies, onion(i, depth) { S.onion = i; if (depth) S.onionDepth = depth; savePrefs(); renderPanel(); render(); }, note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
     lock: toggleLock, saveVersion, view: setViewing, makeDraft, versions: () => S.versions.map(v => v.name),
     tap(name, shift) { const el = S.root.querySelector('[data-name="' + CSS.escape(name) + '"]'); if (!el) return false; tapSelect({ target: el, shift: !!shift, deep: false }); render(); return true; },
     setGap(v) { S.gapVal = String(v); },

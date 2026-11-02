@@ -1,6 +1,6 @@
 # Prototype kit · scripts (2 Nov 2026)
 
-Kept here until the kit has its own repo. `kit.css` and `kit.js` live inside the published [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793640186-8757): its `<style id="kit-css">` and `<script id="kit-js">` blocks are the two files, word for word. The demo page is the same page with those two blocks swapped for `<link rel="stylesheet" href="kit.css">` and `<script src="kit.js"></script>`.
+Kept here until the kit has its own repo. `kit.css` and `kit.js` live inside the published [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793640713-dd85): its `<style id="kit-css">` and `<script id="kit-js">` blocks are the two files, word for word. The demo page is the same page with those two blocks swapped for `<link rel="stylesheet" href="kit.css">` and `<script src="kit.js"></script>`.
 
 ## tools/bundle.py
 
@@ -263,6 +263,46 @@ def main():
             page.evaluate("Kit.onion(1, 2)")
             page.screenshot(path=str(shots / f"{label}_onion_two_layers.png"))
             check("onion skin, two layers")
+            # Shift-drag moves straight; Option-drag makes a copy; Delete removes a copy (computer only)
+            if not mobile:
+                def drag_part(n, dx, dy, hold=None):
+                    page.evaluate("n => Kit.select(n)", n)
+                    bx = page.locator(f'.kit-root [data-name="{n}"]').bounding_box()
+                    cx, cy = bx["x"] + bx["width"] / 2, bx["y"] + bx["height"] / 2
+                    page.mouse.move(cx, cy)
+                    if hold: page.keyboard.down(hold)
+                    page.mouse.down()
+                    for k in range(1, 13):
+                        page.mouse.move(cx + dx * k / 12, cy + dy * k / 12)
+                    page.mouse.up()
+                    if hold: page.keyboard.up(hold)
+                tgt = names[1]
+                y0 = page.locator(f'.kit-root [data-name="{tgt}"]').bounding_box()["y"]
+                drag_part(tgt, 60, 14, "Shift")
+                y1 = page.locator(f'.kit-root [data-name="{tgt}"]').bounding_box()["y"]
+                if abs(y1 - y0) > 0.6:
+                    problems.append(f"{label}: Shift-drag moved up or down ({y0} -> {y1})")
+                drag_part(tgt, 10, 70, "Alt")
+                st = page.evaluate("Kit.state()")
+                copies = page.evaluate("document.querySelectorAll('.kit-root [data-kit-dup]').length")
+                if st["undo"][-1:] != ["Duplicate"] or copies < 1:
+                    problems.append(f"{label}: Option-drag didn't make a copy ({st['undo'][-2:]}, {copies} copies)")
+                if "add a copy of" not in page.evaluate("Kit.changesText()"):
+                    problems.append(f"{label}: changes text doesn't list the copy")
+                if abs(page.locator(f'.kit-root [data-name="{tgt}"]').bounding_box()["y"] - y1) > 0.6:
+                    problems.append(f"{label}: Option-drag moved the original")
+                check("with a copy")
+                page.screenshot(path=str(shots / f"{label}_copy.png"))
+                page.keyboard.press("Delete")
+                if page.evaluate("document.querySelectorAll('.kit-root [data-kit-dup]').length") != copies - 1:
+                    problems.append(f"{label}: Delete didn't remove the copy")
+                page.evaluate("Kit.undo()")
+                if page.evaluate("document.querySelectorAll('.kit-root [data-kit-dup]').length") != copies:
+                    problems.append(f"{label}: undo didn't bring the copy back")
+                page.evaluate("n => Kit.select(n)", tgt)
+                page.keyboard.press("Delete")
+                if page.evaluate("Kit.state().sel.length") == 0:
+                    problems.append(f"{label}: Delete on an original part did something")
             # Deselect: a click outside the phone, Esc, or Shift+Cmd+A
             if not mobile:
                 page.evaluate("n => Kit.select(n)", names[1])
