@@ -141,3 +141,8 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
 .kit-onion-key{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:11px;color:var(--k-fg2)}
 .kit-onion-key span{display:inline-flex;align-items:center;gap:5px}
 .kit-onion-key i{display:inline-block;width:10px;height:10px;border-radius:3px}
+
+/* Guides from the rulers */
+.kit-edit .kit-ruler{pointer-events:auto}
+.kit-edit .kit-ruler:first-of-type{cursor:ns-resize}
+.kit-edit .kit-ruler + .kit-ruler{cursor:ew-resize}

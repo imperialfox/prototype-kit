@@ -149,6 +149,11 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
 .kit-onion-key span{display:inline-flex;align-items:center;gap:5px}
 .kit-onion-key i{display:inline-block;width:10px;height:10px;border-radius:3px}
 
+/* Guides from the rulers */
+.kit-edit .kit-ruler{pointer-events:auto}
+.kit-edit .kit-ruler:first-of-type{cursor:ns-resize}
+.kit-edit .kit-ruler + .kit-ruler{cursor:ew-resize}
+
 </style>
 <style>
 /* The demo app: a sample Suki screen. Only this part is written per prototype. */
@@ -250,7 +255,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
   const AN = { l: 'Align left', c: 'Align centre', r: 'Align right', t: 'Align top', m: 'Align middle', b: 'Align bottom' };
 
   const S = {
-    opts: null, root: null, el: {}, device: 'iphone', look: 0, motion: 0, inspect: true, skel: false, onion: 1, onionDepth: 2, tweening: false, custom: {},
+    opts: null, root: null, el: {}, device: 'iphone', look: 0, motion: 0, inspect: true, skel: false, onion: 1, onionDepth: 2, userGuides: [], gd: null, lastTx: null, tweening: false, custom: {},
     phone: false, open: true, launcher: 'circle', scale: 1,
     sel: [], key: null, multi: false, snap: true, alignTo: 'key', original: false, versions: [], viewing: -1, draftModel: null, saving: false, lastTap: null,
     model: { v: 1, edits: {} }, undo: [], redo: [], lastNudge: 0, nextGroup: 1,
@@ -421,8 +426,11 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     for (const k in S.model.edits) {
       const e = S.model.edits[k]; if (!e.dup) continue;
       const id = k.slice(2); want.add(id);
-      if (S.root.querySelector('[data-kit-dup="' + CSS.escape(id) + '"]')) continue;
-      const src = elOf(e.dup.of); if (src instanceof HTMLElement) makeClone(src, id, e.name);
+      const src = elOf(e.dup.of); if (!(src instanceof HTMLElement)) continue;
+      const have = S.root.querySelector('[data-kit-dup="' + CSS.escape(id) + '"]');
+      // Re-seat existing copies on their original each time, so a reload or a layout change can't leave them adrift.
+      if (have) { have.style.left = src.offsetLeft + 'px'; have.style.top = src.offsetTop + 'px'; continue; }
+      makeClone(src, id, e.name);
     }
     S.root.querySelectorAll('[data-kit-dup]').forEach(c => { if (!want.has(c.dataset.kitDup)) { S.touched.delete(c); c.remove(); } });
   }
@@ -723,6 +731,51 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     });
     return n;
   }
+  const GUIDE = '#00a8e8';
+  function drawUserGuides(ov, W, H, u) {
+    S.userGuides.forEach((g, i) => {
+      if (S.gd && S.gd.idx === i) return;
+      ov.append(g.a === 'x' ? sv('line', { class: 'kit-uguide', x1: g.v, x2: g.v, y1: 0, y2: H, stroke: GUIDE, 'stroke-width': u }) : sv('line', { class: 'kit-uguide', x1: 0, x2: W, y1: g.v, y2: g.v, stroke: GUIDE, 'stroke-width': u }));
+    });
+    const d = S.gd;
+    if (d && d.v != null) {
+      const col = d.inside ? GUIDE : '#8e8e93';
+      ov.append(d.axis === 'x' ? sv('line', { x1: d.v, x2: d.v, y1: 0, y2: H, stroke: col, 'stroke-width': 1.5 * u, 'stroke-dasharray': d.inside ? '' : `${3 * u} ${3 * u}` }) : sv('line', { x1: 0, x2: W, y1: d.v, y2: d.v, stroke: col, 'stroke-width': 1.5 * u, 'stroke-dasharray': d.inside ? '' : `${3 * u} ${3 * u}` }));
+      const txt = d.inside ? (d.axis === 'x' ? 'x ' : 'y ') + d.v : 'Let go to remove';
+      d.axis === 'x' ? darkTag(ov, Math.min(W - 70 * u, Math.max(4 * u, d.v + 6 * u)), 24 * u, txt, u) : darkTag(ov, 8 * u, Math.min(H - 20 * u, Math.max(18 * u, d.v - 6 * u)), txt, u);
+    }
+  }
+  function darkTag(ov, x, y, txt, u, cls) {
+    const w = (txt.length * 6.6 + 12) * u, g = sv('g', cls ? { class: cls } : {});
+    x = Math.max(2 * u, Math.min(x, scr().offsetWidth - w - 2 * u));
+    g.append(sv('rect', { x, y: y - 12 * u, width: w, height: 17 * u, rx: 5 * u, fill: '#1c1c1e', opacity: .9 }));
+    g.append(sv('text', { x: x + 6 * u, y: y + 0.5 * u, style: `font-size:${11 * u}px;font-weight:600;fill:#fff;font-family:-apple-system,system-ui,sans-serif` }, txt));
+    ov.append(g);
+  }
+  function guideAt(p) { const thr = 5 / (S.scale || 1); let best = -1, bd = thr; S.userGuides.forEach((g, i) => { const d = Math.abs((g.a === 'x' ? p.x : p.y) - g.v); if (d <= bd) { bd = d; best = i; } }); return best; }
+  function saveGuides() { if (store) try { store.setItem(S.lsKey + ':guides', JSON.stringify(S.userGuides)); } catch (e) { } }
+  function beginGuide(axis, idx, pointerId) {
+    S.gd = { axis, idx, id: pointerId, v: idx >= 0 ? S.userGuides[idx].v : null, inside: idx >= 0 }; tipHide(true);
+    const W = scr().offsetWidth, H = scr().offsetHeight;
+    const mv = e => { if (e.pointerId !== S.gd.id) return; const p = pt(e.clientX, e.clientY); const v = axis === 'x' ? p.x : p.y; S.gd.v = Math.round(v); S.gd.inside = v >= 0 && v <= (axis === 'x' ? W : H); schedule(); };
+    const up = e => {
+      if (!S.gd || e.pointerId !== S.gd.id) return;
+      window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      const d = S.gd; S.gd = null;
+      if (d.v != null && d.inside) { if (d.idx >= 0) S.userGuides[d.idx].v = d.v; else S.userGuides.push({ a: axis, v: d.v }); S.status = (axis === 'x' ? 'Guide at x ' : 'Guide at y ') + d.v; }
+      else if (d.idx >= 0) { S.userGuides.splice(d.idx, 1); S.status = 'Guide removed'; }
+      saveGuides(); render();
+    };
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  }
+  function bindGuides() {
+    // Drag out of the top ruler for a level guide, out of the left ruler for an upright one.
+    const start = axis => ev => { if (!S.inspect || ev.button > 0) return; ev.preventDefault(); beginGuide(axis, -1, ev.pointerId); };
+    S.el.rt.setAttribute('data-tip', 'Top ruler|Drag down onto the phone for a level guide. Drag a guide back here to remove it|');
+    S.el.rl.setAttribute('data-tip', 'Left ruler|Drag across onto the phone for an upright guide. Drag a guide back here to remove it|');
+    S.el.rt.addEventListener('pointerdown', start('y'));
+    S.el.rl.addEventListener('pointerdown', start('x'));
+  }
   function drawOnion(ov, u) {
     if (S.original || S.tweening || !S.onion || !S.versions.length) return;
     const nb = onionNeighbours();
@@ -745,6 +798,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     ov.setAttribute('width', W); ov.setAttribute('height', H); ov.setAttribute('viewBox', `0 0 ${W} ${H}`);
     drawOnion(ov, u);
     if (S.tweening) return;
+    if (S.inspect) drawUserGuides(ov, W, H, u);
     if (!S.inspect) { if (!S.original) changeList().forEach((c, i) => { if (c.e.note && c.el && c.el.isConnected) { const r = inkRect(c.el); bubble(ov, r.x + r.w + 6 * u, r.y + 2 * u, i + 1, u); } }); return; }
     const sel = liveSel();
     if (S.hover && !sel.includes(S.hover) && S.hover.isConnected) {
@@ -765,6 +819,13 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     if (sel.length === 1 && !S.ptr) distances(ov, sel[0], u);
     if (sel.length === 1 && !S.original && S.viewing < 0 && !isLocked(sel[0])) handles(ov, rectOf(sel[0]), u);
     if (sel.length) { const sb = bounds(sel); S.guides.forEach(g => guide(ov, g, sb, W, H, u)); }
+    const P0 = S.ptr;
+    if (P0 && P0.moved && (P0.mode === 'move' || P0.mode === 'resize') && S.cursor) {
+      let txt;
+      if (P0.mode === 'move') txt = `${signed(P0.mx || 0)}, ${signed(P0.my || 0)}`;
+      else { const e = peek(P0.el) || {}, r = rectOf(P0.el); txt = `${fmt(e.w != null ? e.w : r.w)} × ${fmt(e.h != null ? e.h : r.h)}`; }
+      darkTag(ov, S.cursor.x + 14 * u, S.cursor.y + 18 * u, txt, u, 'kit-live');
+    }
     if (!S.original) changeList().forEach((c, i) => { if (c.el && c.el.isConnected) { if (c.e.note) { const r = inkRect(c.el); bubble(ov, r.x + r.w + 6 * u, r.y + 2 * u, i + 1, u); } else { const r = rectOf(c.el); pin(ov, r.x + r.w - 2 * u, r.y + 2 * u, i + 1, u); } } });
     if (sel.length === 1) nameTag(ov, rectOf(sel[0]), nameOf(sel[0]) + (isLocked(sel[0]) ? ' · locked' : ''), u, true);
   }
@@ -867,6 +928,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     const W = scr().offsetWidth, H = scr().offsetHeight, m = S.opts.margin;
     const tx = [[0, 'screen edge'], [W, 'screen edge'], [W / 2, 'screen centre'], [m, 'margin ' + m], [W - m, 'margin ' + m]];
     const ty = [[H / 2, 'screen centre']], others = [];
+    S.userGuides.forEach(g => (g.a === 'x' ? tx : ty).push([g.v, 'guide']));
     set.forEach(e => {
       if (e === S.root || sel.some(s => s === e || s.contains(e) || e.contains(s))) return;
       const r = rectOf(e); if (r.w < 1 || r.h < 1 || r.y > H || r.y + r.h < 0) return;
@@ -918,7 +980,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     if (!free) { const s = snapBox(P, P.bb.x + dx, P.bb.y + dy, P.bb.w, P.bb.h); q = { x: s.sx ? s.x : P.bb.x + r1(dx), y: s.sy ? s.y : P.bb.y + r1(dy) }; } else S.guides = [];
     if (axis === 'h') { q.y = P.bb.y; S.guides = S.guides.filter(g => g.a === 'x'); S.guides.push({ a: 'note', t: 'Across only' }); }
     if (axis === 'v') { q.x = P.bb.x; S.guides = S.guides.filter(g => g.a === 'y' || g.a === 'g'); S.guides.push({ a: 'note', t: 'Down only' }); }
-    const mx = q.x - P.bb.x, my = q.y - P.bb.y;
+    const mx = q.x - P.bb.x, my = q.y - P.bb.y; P.mx = mx; P.my = my;
     P.starts.forEach(([el, x0, y0]) => { const e = E(el); e.dx = Math.round((x0 + mx) * 100) / 100; e.dy = Math.round((y0 + my) * 100) / 100; applyEl(el, e); S.touched.add(el); });
   }
   function doResize(P, p, free) {
@@ -943,18 +1005,23 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     while (S.root.querySelector('[data-name="' + CSS.escape(name) + '"]')) name = base + ' copy ' + (n++);
     return name;
   }
-  function startDup(P) {
+  function makeCopies(srcs) {
     const made = [];
-    P.starts.forEach(([src]) => {
+    srcs.forEach(src => {
       if (!(src instanceof HTMLElement)) return;
       const id = nextDupId(), se = peek(src) || {};
       S.model.edits['d:' + id] = { name: copyName(src), dup: { of: keyOf(src), ofName: nameOf(src) }, dx: se.dx || 0, dy: se.dy || 0 };
       made.push(id);
     });
-    if (!made.length) { S.status = "That part can't be copied"; return; }
+    if (!made.length) return [];
     syncDups();
     const clones = made.map(id => elOf('d:' + id)).filter(Boolean);
     clones.forEach(c => { applyEl(c, S.model.edits[keyOf(c)]); S.touched.add(c); });
+    return clones;
+  }
+  function startDup(P) {
+    const clones = makeCopies(P.starts.map(s => s[0]));
+    if (!clones.length) { S.status = "That part can't be copied"; return; }
     S.sel = clones; S.key = clones[0]; P.duped = true;
     P.starts = clones.map(c => { const e = peek(c) || {}; return [c, e.dx || 0, e.dy || 0]; });
     P.T = targets(clones);
@@ -992,7 +1059,11 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     L.addEventListener('pointerdown', ev => {
       if (ev.button > 0) return; ev.preventDefault();
       try { L.setPointerCapture(ev.pointerId); } catch (e) { }
-      const p = pt(ev.clientX, ev.clientY), raw = hit(ev.clientX, ev.clientY), deep = ev.metaKey || ev.ctrlKey, target = pick(raw, deep), sel = liveSel();
+      const p0 = pt(ev.clientX, ev.clientY), gi = guideAt(p0);
+      // A guide is grabbed unless the press lands on a part that's already picked (or its handle): picked parts win, so a guide never blocks moving them.
+      const onSel = gi >= 0 && (() => { const s = liveSel(), r0 = hit(ev.clientX, ev.clientY); return (s.length === 1 && handleAt(rectOf(s[0]), p0)) || (r0 && s.some(x => x === r0 || x.contains(r0))); })();
+      if (gi >= 0 && !onSel) { beginGuide(S.userGuides[gi].a, gi, ev.pointerId); return; }
+      const p = p0, raw = hit(ev.clientX, ev.clientY), deep = ev.metaKey || ev.ctrlKey, target = pick(raw, deep), sel = liveSel();
       const hd = sel.length === 1 && !S.original && S.viewing < 0 && !isLocked(sel[0]) ? handleAt(rectOf(sel[0]), p) : null;
       let inSel = target && sel.some(s => s === target || s.contains(target)), pickedNow = false;
       // With a mouse, pressing on anything picks it straight away so it can be dragged (as in Illustrator).
@@ -1024,6 +1095,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
         prune(); applyAll();
         if (P.skipped) S.status = `${P.skipped} locked ${P.skipped > 1 ? 'parts' : 'part'} stayed put`;
         if (P.before.m !== JSON.stringify(S.model)) { S.undo.push({ name: P.duped ? 'Duplicate' : P.mode === 'move' ? 'Move' : 'Resize', st: P.before }); S.redo = []; save(); }
+        if (P.mode === 'move' && (P.mx || P.my)) S.lastTx = { dup: !!P.duped, dx: P.mx, dy: P.my };
         return render();
       }
       if (P.mode === 'resize' && !P.moved) prune();
@@ -1048,7 +1120,22 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     const now = Date.now(), chain = S.undo.length && S.undo[S.undo.length - 1].name === 'Nudge' && now - S.lastNudge < 1000 && !S.redo.length;
     S.lastNudge = now;
     const f = () => sel.forEach(el => { const e = E(el); e.dx = (e.dx || 0) + dx; e.dy = (e.dy || 0) + dy; });
+    if (chain && S.lastTx && !S.lastTx.dup) { S.lastTx.dx += dx; S.lastTx.dy += dy; } else S.lastTx = { dup: false, dx, dy };
     if (chain) { f(); prune(); applyAll(); save(); render(); } else commit('Nudge', f);
+  }
+  const signed = n => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n));
+  function txWords(t) { const w = []; if (t.dx) w.push((t.dx > 0 ? 'right ' : 'left ') + fmt(Math.abs(t.dx))); if (t.dy) w.push((t.dy > 0 ? 'down ' : 'up ') + fmt(Math.abs(t.dy))); return w.join(', '); }
+  function transformAgain() {
+    S.err = ''; S.status = ''; const tx = S.lastTx;
+    if (!tx || (!tx.dx && !tx.dy)) { S.status = 'Nothing to repeat yet. Move something, or Option-drag a copy, first'; return render(); }
+    if (!needSel()) return;
+    const sel = liveSel().filter(el => !isLocked(el)); if (!sel.length) { S.err = LOCKED; return render(); }
+    commit(tx.dup ? 'Copy again' : 'Move again', () => {
+      let els = sel;
+      if (tx.dup) { const c = makeCopies(sel); if (!c.length) return; els = c; S.sel = c; S.key = c[0]; }
+      els.forEach(el => { const e = E(el); e.dx = Math.round(((e.dx || 0) + tx.dx) * 100) / 100; e.dy = Math.round(((e.dy || 0) + tx.dy) * 100) / 100; });
+    });
+    S.status = (tx.dup ? 'Another copy, ' : 'Moved again, ') + txWords(tx); render();
   }
   function needSel(min) { const n = liveSel().length; if (!n) { S.err = 'Tap something on the screen first'; render(); return false; } if (S.viewing >= 0) { S.err = RO; render(); return false; } if (S.original) { S.err = 'Turn off Show original to make changes'; render(); return false; } return true; }
   function align(k) {
@@ -1104,6 +1191,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     if (!sel.length) { S.err = LOCKED; return render(); }
     if (f === 'x' || f === 'y') {
       const b = bounds(sel), d = val(b[f]) - b[f], prop = f === 'x' ? 'dx' : 'dy';
+      if (d) S.lastTx = { dup: false, dx: f === 'x' ? d : 0, dy: f === 'y' ? d : 0 };
       commit(f === 'x' ? 'Move across' : 'Move down', () => sel.forEach(el => { const e = E(el); e[prop] = Math.round(((e[prop] || 0) + d) * 100) / 100; }));
     } else if (f === 'w' || f === 'h') {
       const el = sel[0], r = rectOf(el);
@@ -1242,6 +1330,9 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     ar.append(h('div', { class: 'kit-seg', role: 'group', 'aria-label': 'Line up with' }, [['key', 'Key object'], ['selection', 'Selection'], ['parent', 'Parent'], ['screen', 'Screen']].map(([v, l]) => h('button', { type: 'button', class: S.alignTo === v ? 'on' : '', 'aria-pressed': String(S.alignTo === v), onclick: () => { S.alignTo = v; S.err = ''; render(); } }, l))));
     const oneGroup = us.length === 1 && us[0].length > 1;
     ar.append(h('div', { class: 'kit-ih', style: 'margin-top:8px' },
+      h('button', { type: 'button', class: 'kit-ib' + (S.lastTx ? '' : ' no'), onclick: transformAgain, 'data-tip': S.lastTx ? `Repeat|${S.lastTx.dup ? 'Makes another copy' : 'Moves the picked parts again'}, ${txWords(S.lastTx)}|⌘D` : 'Repeat|Repeats your last move or copy. Move something, or Option-drag a copy, first|⌘D' }, S.lastTx ? `Repeat ${S.lastTx.dup ? 'copy' : 'move'}` : 'Repeat'),
+      S.userGuides.length ? h('button', { type: 'button', class: 'kit-ib', onclick: () => { S.userGuides = []; saveGuides(); S.status = 'Guides cleared'; render(); }, 'data-tip': 'Clear guides|Removes every guide. Dragging one back onto its ruler removes just that one|' }, `Clear guides · ${S.userGuides.length}`) : ''));
+    ar.append(h('div', { class: 'kit-ih', style: 'margin-top:8px' },
       h('button', { type: 'button', class: 'kit-ib' + (S.multi ? ' on' : ''), 'aria-pressed': String(S.multi), onclick: () => { S.multi = !S.multi; render(); }, 'data-tip': 'Select several|Taps add or remove boxes instead of starting again. The first one is the key object|Shift-click' }, 'Select several'),
       h('button', { type: 'button', class: 'kit-ib', onclick: () => oneGroup ? ungroup() : group(), 'data-tip': oneGroup ? 'Ungroup|The boxes move on their own again|⇧⌘G' : 'Group|Picked boxes move and line up as one|⌘G' }, oneGroup ? 'Ungroup' : 'Group'),
       (() => { const allL = sel.length && sel.every(isLocked); return h('button', { type: 'button', class: 'kit-ib', onclick: toggleLock, 'data-tip': allL ? 'Unlock|Lets the picked boxes move again. Double-clicking a locked box does the same|⇧⌘L' : "Lock|Picked boxes can't be moved, nudged or aligned. Double-click one to unlock it|⇧⌘L" }, allL ? 'Unlock' : 'Lock'); })(),
@@ -1282,7 +1373,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     det.addEventListener('toggle', () => { S.outlineOpen = det.open; });
     I.append(det);
     I.append(h('div', { class: 'kit-msg ' + (S.err ? 'err' : 'st'), role: 'status', 'aria-live': 'polite' }, S.err || S.status));
-    I.append(h('div', { class: 'kit-hint', style: 'margin-top:4px' }, 'Click outside the phone, or press Esc or ⇧⌘A, to deselect. Arrows nudge by 1, Shift + arrows by 10. Shift while dragging moves straight across or down; Option drags a copy; ⌘ skips snapping. Delete removes a copy. Rest the pointer on a button for a tip. Changes and versions are kept on this device.'));
+    I.append(h('div', { class: 'kit-hint', style: 'margin-top:4px' }, 'Click outside the phone, or press Esc or ⇧⌘A, to deselect. Arrows nudge by 1, Shift + arrows by 10. Shift while dragging moves straight across or down; Option drags a copy; ⌘ skips snapping; ⌘D repeats. Delete removes a copy. Drag from a ruler for a guide. Rest the pointer on a button for a tip. Changes and versions are kept on this device.'));
     if (keep) { const n = I.querySelector(`[data-kf="${keep.kf}"]`); if (n) { n.value = keep.v; n.focus({ preventScroll: true }); try { n.setSelectionRange(keep.a, keep.b); } catch (e) { } } }
   }
 
@@ -1395,6 +1486,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
       if (mod && k === 'z' && !typing) { ev.preventDefault(); return ev.shiftKey ? redo() : undo(); }
       if (typing) return;
       if (mod && ev.shiftKey && k === 'l') { ev.preventDefault(); return toggleLock(); }
+      if (mod && !ev.shiftKey && k === 'd') { ev.preventDefault(); return transformAgain(); }
       if (mod && k === 'g') { ev.preventDefault(); return ev.shiftKey ? ungroup() : group(); }
       if (ev.key === 'Escape' || (mod && ev.shiftKey && k === 'a')) { ev.preventDefault(); return deselect(); }
       if ((ev.key === 'Backspace' || ev.key === 'Delete') && liveSel().length) { ev.preventDefault(); return removeCopies(); }
@@ -1429,10 +1521,12 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     const canvas = h('div', { class: 'kit-canvas' }, el.rt, el.rl, el.box);
     document.body.append(h('div', { class: 'kit-stage' }, el.dock, el.panel, canvas, el.insp));
     S.open = !(window.innerWidth <= 600);
+    try { const g = JSON.parse((store && store.getItem('kit:' + S.opts.id + ':guides')) || '[]'); if (Array.isArray(g)) S.userGuides = g.filter(x => x && (x.a === 'x' || x.a === 'y') && Number.isFinite(x.v)).slice(0, 40); } catch (e) { }
     load(); try { const pr = store && JSON.parse(store.getItem('kit:prefs') || '{}'); if (pr && typeof pr.inspect === 'boolean') S.inspect = pr.inspect; if (pr && [0, 1, 2].includes(pr.onion)) S.onion = pr.onion; if (pr && [1, 2].includes(pr.onionDepth)) S.onionDepth = pr.onionDepth; } catch (e) { }
     document.body.classList.toggle('kit-edit', S.inspect);
-    applyLook(); applyMotion(); bindLayer(); bindKeys(); bindTips(); bindOutside();
+    applyLook(); applyMotion(); bindLayer(); bindKeys(); bindTips(); bindOutside(); bindGuides();
     renderPanel(); layout(); applyAll(); render();
+    try { document.fonts && document.fonts.ready.then(() => { applyAll(); schedule(); }); } catch (e) { }
     let rz = 0; window.addEventListener('resize', () => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { layout(); renderPanel(); render(); }); });
     let mt = 0; new MutationObserver(() => { clearTimeout(mt); mt = setTimeout(() => { if (S.skel) markText(); applyAll(); schedule(); }, 30); }).observe(root, { childList: true, subtree: true });
     return api;
@@ -1448,7 +1542,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     setLauncher(shape) { S.launcher = shape; renderLauncher(); renderPanel(); },
     changesText, undo, redo, align, distribute, group, ungroup, nudge, field: applyField,
     setAlignTo(v) { S.alignTo = v; render(); },
-    inspect: v => setInspect(v !== false), deselect, removeCopies, onion(i, depth) { S.onion = i; if (depth) S.onionDepth = depth; savePrefs(); renderPanel(); render(); }, note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
+    inspect: v => setInspect(v !== false), deselect, removeCopies, again: transformAgain, clearGuides() { S.userGuides = []; saveGuides(); render(); }, onion(i, depth) { S.onion = i; if (depth) S.onionDepth = depth; savePrefs(); renderPanel(); render(); }, note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
     lock: toggleLock, saveVersion, view: setViewing, makeDraft, versions: () => S.versions.map(v => v.name),
     tap(name, shift) { const el = S.root.querySelector('[data-name="' + CSS.escape(name) + '"]'); if (!el) return false; tapSelect({ target: el, shift: !!shift, deep: false }); render(); return true; },
     setGap(v) { S.gapVal = String(v); },
@@ -1457,7 +1551,7 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
     refresh() { applyAll(); render(); },
     k: () => (S.motion === 1 ? 4 : 1),
     reduced: () => S.motion === 2,
-    state: () => ({ onion: S.onion, tweening: S.tweening, key: S.key ? nameOf(S.key) : null, viewing: S.viewing, edits: JSON.parse(JSON.stringify(S.model.edits)), undo: S.undo.map(u => u.name), redo: S.redo.map(u => u.name), sel: liveSel().map(nameOf), scale: S.scale, phone: S.phone, open: S.open })
+    state: () => ({ guides: S.userGuides.map(g => g.a + ' ' + g.v), lastTx: S.lastTx, onion: S.onion, tweening: S.tweening, key: S.key ? nameOf(S.key) : null, viewing: S.viewing, edits: JSON.parse(JSON.stringify(S.model.edits)), undo: S.undo.map(u => u.name), redo: S.redo.map(u => u.name), sel: liveSel().map(nameOf), scale: S.scale, phone: S.phone, open: S.open })
   };
   window.Kit = api;
 })();

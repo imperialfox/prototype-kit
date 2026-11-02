@@ -260,6 +260,48 @@ def main():
                 page.keyboard.press("Delete")
                 if page.evaluate("Kit.state().sel.length") == 0:
                     problems.append(f"{label}: Delete on an original part did something")
+            # Guides from the rulers, live distance while dragging, and Transform Again (computer only)
+            if not mobile:
+                page.evaluate("Kit.clearGuides(); Kit.select([])")
+                rt = page.locator(".kit-ruler").first.bounding_box()
+                scr = page.locator(".kit-screen").bounding_box()
+                gx, gy0, gy = rt["x"] + rt["width"] / 2, rt["y"] + rt["height"] / 2, scr["y"] + scr["height"] * 0.4
+                page.mouse.move(gx, gy0)
+                page.mouse.down()
+                for k in range(1, 11):
+                    page.mouse.move(gx, gy0 + (gy - gy0) * k / 10)
+                page.mouse.up()
+                gs = page.evaluate("Kit.state().guides")
+                if len(gs) != 1 or not gs[0].startswith("y "):
+                    problems.append(f"{label}: dragging from the top ruler didn't make a level guide ({gs})")
+                page.mouse.move(scr["x"] + scr["width"] * 0.7, gy)
+                page.mouse.down()
+                for k in range(1, 11):
+                    page.mouse.move(scr["x"] + scr["width"] * 0.7, gy - (gy - rt["y"] + 4) * k / 10)
+                page.mouse.up()
+                if page.evaluate("Kit.state().guides.length"):
+                    problems.append(f"{label}: dragging a guide back onto its ruler didn't remove it ({gs})")
+                # live distance tag shows mid-drag
+                page.evaluate("n => Kit.select(n)", names[2])
+                bx = page.locator(f'.kit-root [data-name="{names[2]}"]').bounding_box()
+                cx, cy = bx["x"] + bx["width"] / 2, bx["y"] + bx["height"] / 2
+                page.mouse.move(cx, cy); page.keyboard.down("Alt"); page.mouse.down()
+                for k in range(1, 9):
+                    page.mouse.move(cx, cy + k * 5)
+                live = page.evaluate("(document.querySelector('.kit-ov .kit-live') || {}).textContent || ''")
+                page.mouse.up(); page.keyboard.up("Alt")
+                if not live.startswith(("0, +", "+", "−")):
+                    problems.append(f"{label}: no live distance while dragging ({live!r})")
+                n0 = page.evaluate("document.querySelectorAll('.kit-root [data-kit-dup]').length")
+                page.keyboard.press("Meta+KeyD")
+                page.keyboard.press("Meta+KeyD")
+                n2 = page.evaluate("document.querySelectorAll('.kit-root [data-kit-dup]').length")
+                st = page.evaluate("Kit.state()")
+                if n2 != n0 + 2 or st["undo"][-1:] != ["Copy again"]:
+                    problems.append(f"{label}: ⌘D didn't repeat the copy ({n0} -> {n2}, {st['undo'][-2:]})")
+                check("after transform again")
+                page.screenshot(path=str(shots / f"{label}_repeat.png"))
+                page.evaluate("Kit.undo(); Kit.undo()")
             # Deselect: a click outside the phone, Esc, or Shift+Cmd+A
             if not mobile:
                 page.evaluate("n => Kit.select(n)", names[1])
