@@ -48,3 +48,34 @@ Not in scope: the four Illustrator ideas still offered, and everything under the
 - The four Illustrator ideas still offered (Option + arrows, Shift/Option resize, Option-hover measuring, hide and lock from the Outline).
 - Everything under "Still out" in the blueprint.
 - With the history page open, Skeleton outlines the page underneath too, because both pages are on screen. Harmless; could hide covered pages later.
+
+## Kit 1.1
+
+**Render:** 2 Nov 2026, 19:50. Ivan: "Render. This is how I want things to be. Building system in place to be more optimal."
+**Build:** awaiting Ivan's instruction.
+
+Makes the Prototype kit work in tandem with the Atlas kit (`imperialfox/atlas-kit`, its own repo, no Q number), so notes from a prototype and notes from a real app's Atlas come back together when Ivan says "check my notes". Plan: Ivan's project notes, `claude/atlas_kit_prototype_kit_tandem_blueprint.md` (ask him to attach it).
+
+**Build order:** this first, then Atlas kit 1.0 (its own repo and handoff), then Vocal Sessions Q31 (moves its Atlas onto the Atlas kit).
+
+Scope:
+1. **`SHARED.md`** (new): the basics kept identical in both kits, so changing it means changing both in the same sitting.
+   - Devices: iPhone 402 × 874, iPad 820 × 1180, Mac 1440 × 900.
+   - Looks: Light and Dark; Reduce Motion.
+   - Text styles by size: 34 Large title, 28 Title 1, 22 Title 2, 20 Title 3, 17 Body, 16 Callout, 15 Subhead, 13 Footnote, 12 Caption 1, 11 Caption 2.
+   - **Note format v1:** number, source (`atlas` or `prototype`), app, screen, part name (`data-name` when there is one), marked area (as fractions and in points), element details (tag, classes, text, path, key styles), the note, kind, status (Open · Looking into it · Fixed · Dismissed), where it came from (scan id and app version, or prototype id and version), edits (prototype only: moves, sizes, corners), created and updated.
+   - Never stored: anything typed in a field, real user data.
+2. **Notes and edits in note format v1,** saved to the page's own store when the prototype is published on claude.ai, so Claude can read them and they reach Ivan's phone and Mac. Elsewhere they stay on the device, as in 1.0.
+3. **"Real app" overlay:** show the Atlas's screenshot of the real screen over or beside the prototype, using the existing onion-skin controls, to check the prototype against the live app.
+4. **Copy changes** gains a short header in the shared format (app, screen, prototype version), so pasted changes and stored notes read the same.
+5. `CHANGELOG.md` 1.1, README updated, `Kit.version` `'1.1.0'`, `tools/check.py` covering the above.
+
+Agreed (defaults taken at Render): prototype notes on a page not published on claude.ai stay on that device; "check my notes" covers both kits; each kit version gets its own Render and Build in its own `HANDOFF.md`, with no Q number.
+Still universal: no app's name, colours or screens in the kit.
+Not in scope: the four Illustrator ideas still offered; everything under the blueprint's "Still out"; the Atlas kit itself.
+
+Done when:
+- A note made in a published prototype is stored in note format v1 and Claude can list it from a chat.
+- The "Real app" overlay lines up with an Atlas screenshot at iPhone size.
+- Copy changes starts with the shared header.
+- `tools/check.py` passes on the demo, the starter, the rebuilt rate history and a plain page with no app name.
