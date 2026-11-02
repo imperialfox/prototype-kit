@@ -1,6 +1,6 @@
 # Prototype kit · scripts (2 Nov 2026)
 
-Kept here until the kit has its own repo. `kit.css` and `kit.js` live inside the published [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793638630-3f11): its `<style id="kit-css">` and `<script id="kit-js">` blocks are the two files, word for word. The demo page is the same page with those two blocks swapped for `<link rel="stylesheet" href="kit.css">` and `<script src="kit.js"></script>`.
+Kept here until the kit has its own repo. `kit.css` and `kit.js` live inside the published [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793638940-90e6): its `<style id="kit-css">` and `<script id="kit-js">` blocks are the two files, word for word. The demo page is the same page with those two blocks swapped for `<link rel="stylesheet" href="kit.css">` and `<script src="kit.js"></script>`.
 
 ## tools/bundle.py
 
@@ -226,6 +226,26 @@ def main():
                 problems.append(f"{label}: undo didn't bring the old draft back")
             if page.evaluate("Kit.versions()") != ["First try"]:
                 problems.append(f"{label}: versions list wrong")
+            # Deselect: a click outside the phone, Esc, or Shift+Cmd+A
+            if not mobile:
+                page.evaluate("n => Kit.select(n)", names[1])
+                pt = page.evaluate("""() => { const r = document.querySelector('.kit-canvas').getBoundingClientRect(); const x = r.right + 8, y = r.top + r.height / 2; const e = document.elementFromPoint(x, y); return { x, y, ok: !!(e && e.classList.contains('kit-stage')) }; }""")
+                if pt["ok"]:
+                    page.mouse.click(pt["x"], pt["y"])
+                    if page.evaluate("Kit.state().sel.length"):
+                        problems.append(f"{label}: clicking outside the phone didn't deselect")
+                else:
+                    notes.append(f"{label}: no empty background found to click")
+                for keys in ["Escape", "Shift+Meta+KeyA", "Shift+Control+KeyA"]:
+                    page.evaluate("n => Kit.select(n)", names[1])
+                    page.keyboard.press(keys)
+                    if page.evaluate("Kit.state().sel.length"):
+                        problems.append(f"{label}: {keys} didn't deselect")
+                # A click on the inspector keeps the selection
+                page.evaluate("n => Kit.select(n)", names[1])
+                page.locator(".kit-insp .kit-sh").first.click()
+                if not page.evaluate("Kit.state().sel.length"):
+                    problems.append(f"{label}: clicking the inspector cleared the selection")
             # Hover tips: appear after a pause, mouse only
             if not mobile:
                 btn = page.locator(".kit-insp [data-tip]").first

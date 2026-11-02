@@ -808,7 +808,7 @@
       h('button', { type: 'button', class: 'kit-ib', onclick: () => setViewing(-1), 'data-tip': 'Back to draft|Carry on editing where you left off|' }, 'Back to draft'))));
     const sel = liveSel(), us = units();
     const secSel = h('div', { class: 'kit-sec' });
-    if (!sel.length) secSel.append(h('div', { class: 'kit-hint' }, 'Tap anything on the screen to inspect it. Shift-click, or turn on Select several, to pick more: the first one you pick is the key object the others line up to. ⌘-click picks the smallest part.'));
+    if (!sel.length) secSel.append(h('div', { class: 'kit-hint' }, 'Tap anything on the screen to inspect it. Tap outside the phone to deselect. Shift-click, or turn on Select several, to pick more: the first one you pick is the key object the others line up to. ⌘-click picks the smallest part.'));
     else {
       const el = sel[0];
       if (sel.length === 1) {
@@ -902,7 +902,7 @@
     det.addEventListener('toggle', () => { S.outlineOpen = det.open; });
     I.append(det);
     I.append(h('div', { class: 'kit-msg ' + (S.err ? 'err' : 'st'), role: 'status', 'aria-live': 'polite' }, S.err || S.status));
-    I.append(h('div', { class: 'kit-hint', style: 'margin-top:4px' }, 'Arrows nudge by 1, Shift + arrows by 10. Hold Option while dragging to skip snapping. Rest the pointer on a button for a tip. Changes and versions are kept on this device.'));
+    I.append(h('div', { class: 'kit-hint', style: 'margin-top:4px' }, 'Click outside the phone, or press Esc or ⇧⌘A, to deselect. Arrows nudge by 1, Shift + arrows by 10. Hold Option while dragging to skip snapping. Rest the pointer on a button for a tip. Changes and versions are kept on this device.'));
     if (keep) { const n = I.querySelector(`[data-kf="${keep.kf}"]`); if (n) { n.value = keep.v; n.focus({ preventScroll: true }); try { n.setSelectionRange(keep.a, keep.b); } catch (e) { } } }
   }
 
@@ -993,6 +993,18 @@
     }, () => el.getBoundingClientRect());
   }
 
+  function deselect() { if (!liveSel().length && !S.hover) return; S.sel = []; S.key = null; S.hover = null; S.err = ''; S.status = ''; tipHide(true); render(); }
+  function bindOutside() {
+    // A click on the empty background or the phone's bezel clears the selection; the panel, inspector and dock keep it.
+    document.addEventListener('pointerdown', ev => {
+      if (!S.inspect || ev.button > 0) return;
+      const t = ev.target;
+      if (!t || !t.closest || S.el.screen.contains(t)) return;
+      if (t.closest('.kit-panel, .kit-insp, .kit-dock, .kit-tip')) return;
+      if (t.closest('.kit-stage') || t === document.body || t === document.documentElement) deselect();
+    });
+  }
+
   /* ---------- keyboard ---------- */
   function bindKeys() {
     document.addEventListener('keydown', ev => {
@@ -1004,7 +1016,7 @@
       if (typing) return;
       if (mod && ev.shiftKey && k === 'l') { ev.preventDefault(); return toggleLock(); }
       if (mod && k === 'g') { ev.preventDefault(); return ev.shiftKey ? ungroup() : group(); }
-      if (ev.key === 'Escape') { S.sel = []; S.key = null; return render(); }
+      if (ev.key === 'Escape' || (mod && ev.shiftKey && k === 'a')) { ev.preventDefault(); return deselect(); }
       const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
       if (!d || !liveSel().length) return;
       ev.preventDefault(); const n = ev.shiftKey ? 10 : 1; nudge(d[0] * n, d[1] * n);
@@ -1038,7 +1050,7 @@
     S.open = !(window.innerWidth <= 600);
     load(); try { const pr = store && JSON.parse(store.getItem('kit:prefs') || '{}'); if (pr && typeof pr.inspect === 'boolean') S.inspect = pr.inspect; } catch (e) { }
     document.body.classList.toggle('kit-edit', S.inspect);
-    applyLook(); applyMotion(); bindLayer(); bindKeys(); bindTips();
+    applyLook(); applyMotion(); bindLayer(); bindKeys(); bindTips(); bindOutside();
     renderPanel(); layout(); applyAll(); render();
     let rz = 0; window.addEventListener('resize', () => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { layout(); renderPanel(); render(); }); });
     let mt = 0; new MutationObserver(() => { clearTimeout(mt); mt = setTimeout(() => { if (S.skel) markText(); applyAll(); schedule(); }, 30); }).observe(root, { childList: true, subtree: true });
@@ -1055,7 +1067,7 @@
     setLauncher(shape) { S.launcher = shape; renderLauncher(); renderPanel(); },
     changesText, undo, redo, align, distribute, group, ungroup, nudge, field: applyField,
     setAlignTo(v) { S.alignTo = v; render(); },
-    inspect: v => setInspect(v !== false), note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
+    inspect: v => setInspect(v !== false), deselect, note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
     lock: toggleLock, saveVersion, view: setViewing, makeDraft, versions: () => S.versions.map(v => v.name),
     tap(name, shift) { const el = S.root.querySelector('[data-name="' + CSS.escape(name) + '"]'); if (!el) return false; tapSelect({ target: el, shift: !!shift, deep: false }); render(); return true; },
     setGap(v) { S.gapVal = String(v); },
