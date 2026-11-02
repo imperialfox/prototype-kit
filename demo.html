@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Prototype kit demo</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+/* The demo app: a sample Suki screen. Only this part is written per prototype. */
+#app{font-size:17px}
+#app .page{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding:58px 16px 120px;box-sizing:border-box}
+.is-ipad #app .page{padding:96px 40px 60px}
+#app .top{display:flex;align-items:center;height:44px;margin-bottom:6px}
+#app .back{position:relative;width:44px;height:44px;border-radius:50%;border:0;display:flex;align-items:center;justify-content:center;color:var(--fg);cursor:pointer}
+#app .lt{font-size:34px;font-weight:700;margin:0 0 12px;letter-spacing:.01em}
+#app .seg{position:relative;display:flex;background:var(--fill);border-radius:999px;padding:2px;margin:0 0 16px}
+#app .seg button{position:relative;z-index:1;flex:1;border:0;background:none;border-radius:999px;height:32px;font:inherit;font-size:13px;font-weight:600;color:var(--fg);cursor:pointer}
+#app .seg .knob{position:absolute;top:2px;bottom:2px;left:2px;border-radius:999px;background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.12);transition:transform calc(.45s*var(--k)) cubic-bezier(.3,1.35,.5,1)}
+.motion-reduced #app .seg .knob{transition:none}
+.kit-screen.dark #app .seg .knob{background:var(--fg3)}
+#app .fig{display:flex;align-items:baseline;gap:8px;margin:0 0 2px}
+#app .big{font-size:44px;font-weight:700;letter-spacing:-.01em}
+#app .per{font-size:15px;color:var(--fg2)}
+#app .sub{font-size:15px;color:var(--fg2);margin:0 0 16px}
+#app .card{background:var(--surface);border-radius:20px;padding:14px 16px;margin:0 0 20px}
+#app .chart{display:block;width:100%;height:150px}
+#app .chart .ln{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+#app .chart .ar{fill:var(--accent);opacity:.12}
+#app .chart .gl{stroke:var(--sep);stroke-dasharray:2 3}
+#app .foot{font-size:13px;color:var(--fg2);margin:8px 0 0}
+#app .sh{font-size:13px;font-weight:400;color:var(--fg2);text-transform:uppercase;letter-spacing:.03em;margin:0 0 6px 16px}
+#app .split{display:flex;flex-direction:column;gap:0;padding:4px 16px}
+#app .srow{display:flex;justify-content:space-between;align-items:center;min-height:44px;font-size:17px}
+#app .srow + .srow{border-top:.5px solid var(--sep)}
+#app .neg{color:var(--sys-red)}
+#app .pos{color:var(--sys-green)}
+#app ul.list{list-style:none;padding:4px 0}
+#app ul.list li{display:flex;gap:12px;align-items:center;min-height:50px;padding:0 16px;font-size:15px}
+#app ul.list li + li{border-top:.5px solid var(--sep)}
+#app .dot{width:10px;height:10px;border-radius:50%;background:var(--fg);flex:none}
+#app .date{color:var(--fg2);font-size:13px;min-width:48px}
+#app .tabbar{position:absolute;left:21px;right:21px;bottom:21px;height:62px;border-radius:999px;display:flex;align-items:center;padding:0 4px;box-sizing:border-box;z-index:5}
+.is-ipad #app .tabbar{left:50%;right:auto;width:460px;transform:translateX(-50%);top:24px;bottom:auto;height:52px}
+#app .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:54px;border-radius:999px;font-size:11px;color:var(--fg);border:0;background:none;cursor:pointer}
+#app .tab.on{color:var(--accent);background:var(--fill)}
+#app .tab svg{width:22px;height:22px}
+</style>
+</head>
+<body>
+<div id="app" data-name="Rate history page">
+  <div class="page" data-name="Page">
+    <div class="top" data-name="Top bar"><button class="back glass" data-name="Back button" aria-label="Back to Convert"><svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2L2 10l8 8"/></svg></button></div>
+    <h1 class="lt" data-name="Large title">Rate history</h1>
+    <div class="seg" data-name="Range pill" role="tablist" aria-label="Range">
+      <span class="knob" aria-hidden="true"></span>
+      <button role="tab" aria-selected="false">M</button><button role="tab" aria-selected="false">6M</button><button role="tab" aria-selected="true">Y</button><button role="tab" aria-selected="false">5Y</button><button role="tab" aria-selected="false">All</button>
+    </div>
+    <div class="fig" data-name="Rate figure"><span class="big">₱85.32</span><span class="per">per £1 · 30 Oct</span></div>
+    <p class="sub" data-name="£100 line">£100 buys ₱8,532 · up 10.4% in a year</p>
+    <div class="card" data-name="Chart card">
+      <svg class="chart" viewBox="0 0 340 150" preserveAspectRatio="none" data-name="Rate line" aria-label="Rate over the last year">
+        <line class="gl" x1="0" x2="340" y1="30" y2="30"/><line class="gl" x1="0" x2="340" y1="75" y2="75"/><line class="gl" x1="0" x2="340" y1="120" y2="120"/>
+        <path class="ar" d="M0 138 C40 134 60 128 90 118 S150 100 180 92 S240 70 270 52 S320 22 340 20 L340 150 L0 150Z"/>
+        <path class="ln" d="M0 138 C40 134 60 128 90 118 S150 100 180 92 S240 70 270 52 S320 22 340 20"/>
+      </svg>
+      <p class="foot" data-name="Chart footnote">Line shape is a sample. Low ₱76.58 (4 Nov 2025), high ₱85.35 (26 Oct).</p>
+    </div>
+    <h2 class="sh" data-name="Why heading">Why it moved</h2>
+    <div class="card split" data-name="Why it moved card">
+      <div class="srow" data-name="Peso row"><span>Peso against the dollar</span><span class="neg">−7.6%</span></div>
+      <div class="srow" data-name="Pound row"><span>Pound against the dollar</span><span class="pos">+2.0%</span></div>
+    </div>
+    <h2 class="sh" data-name="Events heading">What happened</h2>
+    <ul class="card list" data-name="What happened list">
+      <li><span class="date">22 Oct</span><span class="dot" aria-hidden="true"></span>BSP raised its rate to 5.50%</li>
+      <li><span class="date">27 Aug</span><span class="dot" aria-hidden="true"></span>BSP raised its rate to 5.00%</li>
+      <li><span class="date">18 Jun</span><span class="dot" aria-hidden="true"></span>BSP raised its rate to 4.75%</li>
+      <li><span class="date">23 Apr</span><span class="dot" aria-hidden="true"></span>BSP raised its rate to 4.50%</li>
+    </ul>
+    <p class="foot" id="source" data-name="Source line">ECB reference rates · checked 2 Nov</p>
+  </div>
+  <nav class="tabbar glass" data-name="Tab bar" aria-label="Tabs">
+    <button class="tab" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>Home</button>
+    <button class="tab" aria-label="Till"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M7 4h10v3H7z"/></svg>Till</button>
+    <button class="tab" aria-label="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg>Search</button>
+    <button class="tab" aria-label="Spending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Spending</button>
+    <button class="tab on" aria-label="Convert" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 8h13l-3-3M19 16H6l3 3"/></svg>Convert</button>
+  </nav>
+</div>
+<script src="kit.js"></script>
+<script>
+(function(){
+  const pill = document.querySelector('#app .seg'), knob = pill.querySelector('.knob'), btns = [...pill.querySelectorAll('button')];
+  function place(){ const on = btns.findIndex(b => b.getAttribute('aria-selected') === 'true'), b = btns[on]; knob.style.width = b.offsetWidth + 'px'; knob.style.transform = `translateX(${b.offsetLeft - 2}px)`; }
+  btns.forEach(b => b.addEventListener('click', () => { btns.forEach(x => x.setAttribute('aria-selected', String(x === b))); place(); }));
+  Kit.start({
+    app: 'Suki', title: 'kit demo', id: 'kit-demo-v1',
+    controls: [
+      { name: 'Signal', options: ['Online', 'Offline'], onChange: i => { document.getElementById('source').textContent = i ? 'Saved on your phone · last rate 30 Oct' : 'ECB reference rates · checked 2 Nov'; } },
+      { name: 'Launcher (pick one)', options: ['Circle', 'Capsule', 'Edge tab', 'Square'], onChange: i => Kit.setLauncher(['circle', 'capsule', 'tab', 'square'][i]) }
+    ]
+  });
+  requestAnimationFrame(place);
+  window.addEventListener('kit:change', () => requestAnimationFrame(place));
+})();
+</script>
+</body>
+</html>
