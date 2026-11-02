@@ -109,3 +109,31 @@ Done when:
 - Versions and guides on the page's store (only notes and the draft go there now).
 - The Atlas reading a prototype's notes: that's Atlas kit 1.0, next.
 
+## Kit 1.2
+
+**Render:** 2 Nov 2026, 20:25. Ivan: "I'm ready to fast track it 1.2, render" (straight from the plan, no preview).
+**Build:** awaiting Ivan's instruction.
+
+Makes the rulers, guides and inspector follow scrolling, so positions read right on long, scrolling screens. Today both rulers measure the screen (0 is always its top), guides are pinned to the screen, and a part far down a list reads its on-screen position. Moves and size changes are stored as differences, so Copy changes is not affected.
+
+Scope:
+1. **The left ruler follows the scroll.** When the picked part (or, with nothing picked, the part under the pointer) sits in a scrolling area, the ticks slide as it scrolls and the numbers show its place on the whole page. Fixed bars (such as a top bar or tab bar) keep screen numbers, and their stretch of the ruler is shaded so the scrolling area's start and end show.
+2. **A "Ruler" control:** Auto (default; as in 1), Screen (as in 1.1), Page (always from the top of the content).
+3. **Guides stick to what they're dropped on:** on scrolling content they scroll with it; on a fixed bar they stay. Saved, so they survive a reload (guides saved by 1.1 stay screen guides).
+4. **A scroll marker on the left ruler:** a thin bar for how far down the page it is, and a "Scrolled 240" tag while scrolling.
+5. **The inspector's Top box shows both** for a part in a scrolling area, e.g. "Top 120 on screen · 480 on page".
+6. **The same for sideways scrolling** (carousels) on the top ruler.
+7. When several areas scroll (a sheet over a list), the rulers follow the one holding the picked part.
+8. `CHANGELOG.md` 1.2, README updated, `Kit.version` `'1.2.0'`, a longer list on `tools/plain.html` so there is something to scroll, and `tools/check.py` covering the above (scroll a long list, read the rulers, guides and Top box).
+
+Agreed (default taken at Render): Ruler starts on Auto; the control's choice is remembered on the device like Inspect.
+Still universal: no app's name, colours or screens in the kit.
+Not in scope: guides on the page's store (they stay on the device); anything else in "Left for later".
+
+Done when:
+- With a part picked in a scrolled list, the left ruler's numbers match its place on the page, and fixed bars keep screen numbers with their stretch shaded.
+- A guide dropped on scrolling content scrolls with it, one dropped on a fixed bar doesn't, and both are back after a reload.
+- The Top box shows both numbers in a scrolling area, and one number elsewhere.
+- Screen mode behaves exactly as 1.1.
+- `tools/check.py` passes on the demo, the starter, the rebuilt rate history and the plain page.
+
