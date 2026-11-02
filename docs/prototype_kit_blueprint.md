@@ -1,12 +1,12 @@
 # Prototype kit · Blueprint (2 Nov 2026)
 
 **Stage:** Rendered 2 Nov 2026, 17:49 · Build: awaiting · live state: `HANDOFF.md` in `imperialfox/prototype-kit`, which Build creates. Until then the record is held in the kit's local working copy and this line.
-**Prototype:** [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793641362-2856; earlier 1793640713-dd85, 1793640186-8757, 1793639334-5bce, 1793638940-90e6, 1793638630-3f11, 1793638198-6571 and 1793637040-f3ec). The `kit.css` and `kit.js` inside it are the kit, word for word. The two scripts are in `claude/prototype_kit_scripts.md`.
+**Prototype:** [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793641901-293e; earlier 1793641362-2856, 1793640713-dd85, 1793640186-8757, 1793639334-5bce, 1793638940-90e6, 1793638630-3f11, 1793638198-6571 and 1793637040-f3ec). The `kit.css` and `kit.js` inside it are the kit, word for word. The two scripts are in `claude/prototype_kit_scripts.md`.
 **From:** the workflow audit's C05 "Prototype starter" (`claude/suki_workflow_skills_audit_2026-11-02.md`) and the rate history chat (2 Nov, 15:42): "build the prototype tools once, as a shared kit".
 
 ## Goal
 
-Every clickable prototype, for any of Ivan's apps, starts from one shared kit. Each prototype only adds its own screens and its own states. The kit also lets Ivan inspect and adjust a prototype himself, then hand back one exact list of changes.
+Every clickable prototype, for any of Ivan's apps, starts from one shared kit. The kit is universal: it belongs to no app. Suki was only the first place it was planned, and its rate history screen is only the demo and the proof. Each prototype only adds its own screens and its own states. The kit also lets Ivan inspect and adjust a prototype himself, then hand back one exact list of changes.
 
 ## Agreed (Ivan, 2 Nov)
 
@@ -28,6 +28,8 @@ Every clickable prototype, for any of Ivan's apps, starts from one shared kit. E
 - **Up to two onion layers, the second fainter** (17:21).
 - **Shift-drag moves only across or down; Option-drag duplicates, like established programs** (17:28).
 - **Illustrator ideas 1–3: guides pulled from the rulers, a live distance tag while dragging, Transform Again (⌘D)** (17:35), straight into the prototype with no wireframe this time.
+- **Render** (17:49): "im happy with this now, render!"
+- **Universal, not limited to Suki** (17:50): "this prototype kit should be universal and not limited to just this app." So: nothing in `kit.css`, `kit.js` or the tools names an app or uses an app's own colours; each prototype passes its own name, screens, tokens and controls; with no name given the kit says "the prototype" and "not part of the app"; Copy changes measures in the device shown (iPhone, iPad or Mac points); the README and `starter.html` are written for any app; the kit's records live in its own repo, not in Suki's queue or handoff.
 
 ## Defaults used where Ivan didn't pick (can be changed)
 
@@ -100,7 +102,8 @@ Every clickable prototype, for any of Ivan's apps, starts from one shared kit. E
 
 - `tools/check.py` passes on the demo and on the rebuilt rate history prototype, on a computer and a phone. On 2 Nov it already passes on the demo: every control state, Inspect off and on (and on by default), nudge, number boxes, align, group, drag, key object, lock and double-tap unlock, versions (save, view read-only, make draft, undo), onion skin (Off, Before and Both; two layers with the second fainter; one layer hiding the second; the glide starting and finishing), Shift-drag staying level, Option-drag making a copy without moving the original, Delete removing a copy and undo bringing it back, Delete leaving an original alone, a guide dragged from the top ruler and dragged back off to remove it, the live distance tag mid-drag, ⌘D twice making two more copies as "Copy again", deselect (click outside, Esc, ⇧⌘A, and the inspector keeping the selection), hover tip timing, undo, redo, copy, show original, the note bubble with Inspect off, and reload keeping copies in the same place.
 - The rebuilt rate history prototype looks and behaves the same as before, side by side.
-- `starter.html` opens with the frame, panel and an empty screen.
+- `starter.html` opens with the frame, panel and an empty screen, and names no app.
+- `tools/check.py` passes on a plain page from another app with no app name given. On 2 Nov it passes on a sample Notes screen (9 control states, computer and phone).
 - No part in the Outline or inspector is named "Element".
 
 ## Checked on the prototype (2 Nov)
@@ -112,6 +115,7 @@ Every clickable prototype, for any of Ivan's apps, starts from one shared kit. E
 - Fixed after looking (fifth version): the ghosts' tint was too strong over the chart, so they're now faint outlines; the Inspect switch squeezed the panel's title onto two lines, so it's an icon button in the header.
 - Looked at (sixth version): a back button moved across three versions shows its path through both layers on Draft, and on Both from a middle version.
 - Fixed after looking (seventh version): the inspector said "Moved right 88" for a copy; it now says where the copy sits compared with its original.
+- Fixed for universal use (ninth version): with no app name the panel said "not part of App" and Copy changes said "the App prototype"; it now says "not part of the app" and "the prototype". Copy changes always said "iPhone points"; it now names the device shown.
 - Fixed after testing (eighth version): a copy could come back in a slightly different place after a reload; copies are now re-seated on their original every time the screen updates. A guide running through the middle of a picked part grabbed the press instead of the part; picked parts now win.
 
 ## Decisions (settled at Render, 2 Nov 17:49, with the defaults)

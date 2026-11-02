@@ -1,6 +1,6 @@
 /* Prototype kit 1.0 · shared frame, controls, inspector and editing tools for Ivan's app prototypes.
    Prototype-only: nothing here is ever built into an app.
-   Use: put the app in one element (e.g. <div id="app">), then call Kit.start({ app: 'Suki', root: '#app', controls: [...] }). */
+   Use: put the app in one element (e.g. <div id="app">), then call Kit.start({ app: 'Your app', root: '#app', controls: [...] }). */
 (function () {
   'use strict';
 
@@ -232,7 +232,7 @@
     if (!list.length && !gs.length) return '';
     const d = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     const vn = S.viewing >= 0 ? ` · version “${S.versions[S.viewing].name}”` : '';
-    const lines = [`Changes to the ${S.opts.app} prototype${S.opts.title ? ' (' + S.opts.title + ')' : ''}${vn}, ${d}`, 'Measured in iPhone points.', ''];
+    const lines = [`Changes to the ${S.opts.app ? S.opts.app + ' ' : ''}prototype${S.opts.title ? ' (' + S.opts.title + ')' : ''}${vn}, ${d}`, `Measured in ${S.device === 'ipad' ? 'iPad' : S.device === 'mac' ? 'Mac' : 'iPhone'} points.`, ''];
     list.forEach((c, i) => {
       const e = c.e, parts = [], mv = [];
       if (e.dup) {
@@ -316,7 +316,7 @@
     const p = S.el.panel; p.textContent = '';
     const shape = S.phone ? 'tab' : S.launcher;
     p.append(h('div', { class: 'kit-ph' },
-      h('div', null, h('div', { class: 'kit-pt' }, 'Prototype controls'), h('div', { class: 'kit-ps' }, `not part of ${S.opts.app}`)),
+      h('div', null, h('div', { class: 'kit-pt' }, 'Prototype controls'), h('div', { class: 'kit-ps' }, S.opts.app ? `not part of ${S.opts.app}` : 'not part of the app')),
       inspBtn('kit-ins-p'),
       h('button', { type: 'button', class: 'kit-min is-' + shape, 'aria-label': 'Minimise prototype controls', 'data-tip': 'Minimise|Folds the controls away. Tap the launcher to bring them back|', onclick: () => setOpen(false) }, icon('min'))));
     const gs = groups();
@@ -1258,7 +1258,7 @@
 
   /* ---------- start ---------- */
   function start(opts) {
-    S.opts = Object.assign({ app: 'App', id: location.pathname + location.search, root: '#app', controls: [], mac: false, launcher: 'circle', gaps: [16], margin: 16, title: '' }, opts || {});
+    S.opts = Object.assign({ app: '', id: location.pathname + location.search, root: '#app', controls: [], mac: false, launcher: 'circle', gaps: [16], margin: 16, title: '' }, opts || {});
     const root = typeof S.opts.root === 'string' ? document.querySelector(S.opts.root) : S.opts.root;
     if (!root) throw new Error('Kit: root not found');
     S.root = root; S.launcher = S.opts.launcher; S.lsKey = 'kit:' + S.opts.id;
