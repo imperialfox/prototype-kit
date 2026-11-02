@@ -1,6 +1,6 @@
 # Prototype kit · Blueprint (2 Nov 2026)
 
-**Stage:** prototype made and updated (2 Nov, 17:42). Nothing in any repo. The kit's repo waits for Ivan's "render", then "build".
+**Stage:** Rendered 2 Nov 2026, 17:49 · Build: awaiting · live state: `HANDOFF.md` in `imperialfox/prototype-kit`, which Build creates. Until then the record is held in the kit's local working copy and this line.
 **Prototype:** [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793641362-2856; earlier 1793640713-dd85, 1793640186-8757, 1793639334-5bce, 1793638940-90e6, 1793638630-3f11, 1793638198-6571 and 1793637040-f3ec). The `kit.css` and `kit.js` inside it are the kit, word for word. The two scripts are in `claude/prototype_kit_scripts.md`.
 **From:** the workflow audit's C05 "Prototype starter" (`claude/suki_workflow_skills_audit_2026-11-02.md`) and the rate history chat (2 Nov, 15:42): "build the prototype tools once, as a shared kit".
 
@@ -114,7 +114,7 @@ Every clickable prototype, for any of Ivan's apps, starts from one shared kit. E
 - Fixed after looking (seventh version): the inspector said "Moved right 88" for a copy; it now says where the copy sits compared with its original.
 - Fixed after testing (eighth version): a copy could come back in a slightly different place after a reload; copies are now re-seated on their original every time the screen updates. A guide running through the middle of a picked part grabbed the press instead of the part; picked parts now win.
 
-## Decisions for Ivan (each has a default)
+## Decisions (settled at Render, 2 Nov 17:49, with the defaults)
 
 1. **Where the kit lives.** *Default if unanswered:* its own public repo, `imperialfox/prototype-kit`.
 2. **Launcher shape.** *Default if unanswered:* circle on a computer, edge tab on a phone.
