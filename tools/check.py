@@ -203,8 +203,23 @@ def main():
                 problems.append(f"{label}: onion skin Both shows no ghost of the draft after this version")
             page.screenshot(path=str(shots / f"{label}_onion.png"))
             check("onion skin")
-            page.evaluate("Kit.view(-1); Kit.onion(1)")
-            page.wait_for_timeout(600)
+            # Two layers: the version before that shows too, fainter
+            page.evaluate("Kit.view(-1)")
+            page.wait_for_function("!Kit.state().tweening")
+            page.evaluate("n => { Kit.saveVersion('Second try'); Kit.select(n); Kit.nudge(0, 14); }", names[2])
+            page.evaluate("Kit.onion(1, 2)")
+            two = page.evaluate("[document.querySelectorAll('.kit-ov .kit-ghost-1').length, document.querySelectorAll('.kit-ov .kit-ghost-2').length]")
+            if not two[0] or not two[1]:
+                problems.append(f"{label}: two onion layers should both show ghosts, got {two}")
+            fade = page.evaluate("(() => { const a = document.querySelector('.kit-ov .kit-ghost-1'), b = document.querySelector('.kit-ov .kit-ghost-2'); return a && b ? [+a.getAttribute('stroke-opacity'), +b.getAttribute('stroke-opacity')] : [0, 0]; })()")
+            if not fade[1] < fade[0]:
+                problems.append(f"{label}: the second onion layer isn't fainter ({fade})")
+            page.evaluate("Kit.onion(1, 1)")
+            if page.evaluate("document.querySelectorAll('.kit-ov .kit-ghost-2').length"):
+                problems.append(f"{label}: one layer still shows a second ghost")
+            page.evaluate("Kit.onion(1, 2)")
+            page.screenshot(path=str(shots / f"{label}_onion_two_layers.png"))
+            check("onion skin, two layers")
             # Deselect: a click outside the phone, Esc, or Shift+Cmd+A
             if not mobile:
                 page.evaluate("n => Kit.select(n)", names[1])

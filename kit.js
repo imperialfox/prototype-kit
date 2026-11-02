@@ -15,7 +15,7 @@
   const AN = { l: 'Align left', c: 'Align centre', r: 'Align right', t: 'Align top', m: 'Align middle', b: 'Align bottom' };
 
   const S = {
-    opts: null, root: null, el: {}, device: 'iphone', look: 0, motion: 0, inspect: true, skel: false, onion: 1, tweening: false, custom: {},
+    opts: null, root: null, el: {}, device: 'iphone', look: 0, motion: 0, inspect: true, skel: false, onion: 1, onionDepth: 2, tweening: false, custom: {},
     phone: false, open: true, launcher: 'circle', scale: 1,
     sel: [], key: null, multi: false, snap: true, alignTo: 'key', original: false, versions: [], viewing: -1, draftModel: null, saving: false, lastTap: null,
     model: { v: 1, edits: {} }, undo: [], redo: [], lastNudge: 0, nextGroup: 1,
@@ -273,6 +273,7 @@
     ];
     if (S.versions.length) g.push({ name: 'Version', options: ['Draft'].concat(S.versions.map(v => v.name)), get: () => S.viewing + 1, set: i => setViewing(i - 1) });
     if (S.versions.length) g.push({ name: 'Onion skin', options: ['Off', 'Before', 'Both'], get: () => S.onion, set: i => { S.onion = i; savePrefs(); render(); } });
+    if (S.versions.length && S.onion) g.push({ name: 'Layers', options: ['1', '2'], get: () => S.onionDepth - 1, set: i => { S.onionDepth = i + 1; savePrefs(); render(); } });
     S.opts.controls.forEach(c => g.push({ name: c.name, own: true, options: c.options, get: () => S.custom[c.name], set: i => { S.custom[c.name] = i; try { c.onChange && c.onChange(i, c.options[i]); } catch (e) { console.error(e); } if (S.skel) markText(); applyAll(); render(); } }));
     return g;
   }
@@ -291,11 +292,12 @@
         h('div', { class: 'kit-gl' }, g.name),
         h('div', { class: 'kit-seg', role: 'group', 'aria-label': g.name },
           g.options.map((o, i) => h('button', { type: 'button', class: i === cur ? 'on' : '', 'aria-pressed': String(i === cur), onclick: () => { g.set(i); renderPanel(); fire(); } }, o)))));
-      if (g.name === 'Onion skin' && S.onion) {
+      if (g.name === 'Layers') {
         const nb = onionNeighbours(), key = h('div', { class: 'kit-onion-key' });
-        if (nb.before) key.append(h('span', null, h('i', { style: 'background:' + ONION.before }), 'Before: ' + nb.before.name));
-        if (nb.after) key.append(h('span', null, h('i', { style: 'background:' + ONION.after }), 'After: ' + nb.after.name));
-        if (!nb.before && !nb.after) key.append(h('span', null, 'Nothing to compare on this side'));
+        const sw = (col, li) => h('i', { style: `background:${col};opacity:${li ? .4 : .85}` });
+        nb.before.forEach((f, li) => key.append(h('span', null, sw(ONION.before, li), (li ? 'Before that: ' : 'Before: ') + f.name)));
+        nb.after.forEach((f, li) => key.append(h('span', null, sw(ONION.after, li), (li ? 'After that: ' : 'After: ') + f.name)));
+        if (!nb.before.length && !nb.after.length) key.append(h('span', null, 'Nothing to compare on this side'));
         p.append(key);
       }
     });
@@ -406,43 +408,58 @@
   /* ---------- onion skin ---------- */
   const ONION = { before: '#ff453a', after: '#30d158' };
   function onionNeighbours() {
-    // Versions in order, then Draft, like frames on a timeline.
+    // Versions in order, then Draft, like frames on a timeline. Up to two layers each side.
     const draft = S.viewing < 0 ? S.model : S.draftModel;
     const seq = S.versions.map(v => ({ name: v.name, model: v.model })).concat([{ name: 'Draft', model: draft }]);
-    const i = S.viewing < 0 ? seq.length - 1 : S.viewing;
-    return { before: S.onion >= 1 && i > 0 ? seq[i - 1] : null, after: S.onion >= 2 && i < seq.length - 1 ? seq[i + 1] : null };
+    const i = S.viewing < 0 ? seq.length - 1 : S.viewing, d = S.onionDepth;
+    const before = [], after = [];
+    if (S.onion >= 1) for (let n = 1; n <= d; n++) if (i - n >= 0) before.push(seq[i - n]);
+    if (S.onion >= 2) for (let n = 1; n <= d; n++) if (i + n < seq.length) after.push(seq[i + n]);
+    return { before, after };
   }
-  function ghosts(ov, frame, col, u) {
-    if (!frame) return 0;
-    const keys = new Set(Object.keys(S.model.edits).concat(Object.keys(frame.model.edits || {})));
-    let n = 0, labelled = false;
+  function geomIn(k, el, r, model) {
+    const cur = S.model.edits[k] || {}, oth = (model.edits || {})[k] || {};
+    const bx = r.x - (cur.dx || 0), by = r.y - (cur.dy || 0);
+    const bw = cur.w != null && cur.w0 != null ? cur.w0 : r.w, bh = cur.h != null && cur.h0 != null ? cur.h0 : r.h;
+    return { x: bx + (oth.dx || 0), y: by + (oth.dy || 0), w: oth.w != null ? oth.w : bw, h: oth.h != null ? oth.h : bh };
+  }
+  const sameRect = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5;
+  function ghostSide(ov, frames, col, u) {
+    if (!frames.length) return 0;
+    const fade = [1, 0.45];
+    const keys = new Set(Object.keys(S.model.edits));
+    frames.forEach(f => Object.keys((f.model && f.model.edits) || {}).forEach(k => keys.add(k)));
+    const labelled = frames.map(() => false); let n = 0;
     keys.forEach(k => {
       const el = elOf(k); if (!el || !el.isConnected) return;
-      const cur = S.model.edits[k] || {}, oth = frame.model.edits[k] || {}, r = rectOf(el);
-      const bx = r.x - (cur.dx || 0), by = r.y - (cur.dy || 0);
-      const bw = cur.w != null && cur.w0 != null ? cur.w0 : r.w, bh = cur.h != null && cur.h0 != null ? cur.h0 : r.h;
-      const g = { x: bx + (oth.dx || 0), y: by + (oth.dy || 0), w: oth.w != null ? oth.w : bw, h: oth.h != null ? oth.h : bh };
-      if (Math.abs(g.x - r.x) < 0.5 && Math.abs(g.y - r.y) < 0.5 && Math.abs(g.w - r.w) < 0.5 && Math.abs(g.h - r.h) < 0.5) return;
-      const rad = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, g.w / 2, g.h / 2);
-      ov.append(sv('rect', { class: 'kit-ghost', x: g.x, y: g.y, width: Math.max(0, g.w), height: Math.max(0, g.h), rx: rad, fill: col, 'fill-opacity': .045, stroke: col, 'stroke-opacity': .85, 'stroke-width': 1.2 * u, 'stroke-dasharray': `${4 * u} ${3 * u}` }));
-      const c1 = { x: g.x + g.w / 2, y: g.y + g.h / 2 }, c2 = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
-      if (Math.hypot(c2.x - c1.x, c2.y - c1.y) > 3) {
-        ov.append(sv('line', { x1: c1.x, y1: c1.y, x2: c2.x, y2: c2.y, stroke: col, 'stroke-opacity': .7, 'stroke-width': 1.2 * u }));
-        ov.append(sv('circle', { cx: c1.x, cy: c1.y, r: 2.5 * u, fill: col }));
-      }
-      if (!labelled) {
-        labelled = true; const t = frame.name.length > 18 ? frame.name.slice(0, 17) + '…' : frame.name, w = (t.length * 6.3 + 10) * u;
-        ov.append(sv('rect', { x: g.x, y: g.y - 16 * u, width: w, height: 15 * u, rx: 4 * u, fill: col, opacity: .9 }));
-        ov.append(sv('text', { x: g.x + 5 * u, y: g.y - 5 * u, style: `font-size:${11 * u}px;fill:#fff;font-family:-apple-system,system-ui,sans-serif` }, t));
-      }
-      n++;
+      const r = rectOf(el), rad0 = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+      let prev = r, prevCentre = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+      frames.forEach((f, li) => {
+        const g = geomIn(k, el, r, f.model), a = fade[li];
+        const c = { x: g.x + g.w / 2, y: g.y + g.h / 2 };
+        if (!sameRect(g, r) && !(li > 0 && sameRect(g, prev))) {
+          const rad = Math.min(rad0, g.w / 2, g.h / 2);
+          ov.append(sv('rect', { class: 'kit-ghost kit-ghost-' + (li + 1), x: g.x, y: g.y, width: Math.max(0, g.w), height: Math.max(0, g.h), rx: rad, fill: col, 'fill-opacity': .045 * a, stroke: col, 'stroke-opacity': .85 * a, 'stroke-width': 1.2 * u, 'stroke-dasharray': li ? `${2 * u} ${3 * u}` : `${4 * u} ${3 * u}` }));
+          n++;
+          if (!labelled[li]) {
+            labelled[li] = true; const t = f.name.length > 18 ? f.name.slice(0, 17) + '…' : f.name, w = (t.length * 6.3 + 10) * u;
+            ov.append(sv('rect', { x: g.x, y: g.y - 16 * u, width: w, height: 15 * u, rx: 4 * u, fill: col, opacity: .9 * a }));
+            ov.append(sv('text', { x: g.x + 5 * u, y: g.y - 5 * u, opacity: a < 1 ? .85 : 1, style: `font-size:${11 * u}px;fill:#fff;font-family:-apple-system,system-ui,sans-serif` }, t));
+          }
+        }
+        if (Math.hypot(c.x - prevCentre.x, c.y - prevCentre.y) > 3) {
+          ov.append(sv('line', { x1: c.x, y1: c.y, x2: prevCentre.x, y2: prevCentre.y, stroke: col, 'stroke-opacity': .7 * a, 'stroke-width': 1.2 * u }));
+          ov.append(sv('circle', { cx: c.x, cy: c.y, r: 2.5 * u, fill: col, 'fill-opacity': a }));
+        }
+        prev = g; prevCentre = c;
+      });
     });
     return n;
   }
   function drawOnion(ov, u) {
     if (S.original || S.tweening || !S.onion || !S.versions.length) return;
     const nb = onionNeighbours();
-    ghosts(ov, nb.before, ONION.before, u); ghosts(ov, nb.after, ONION.after, u);
+    ghostSide(ov, nb.before, ONION.before, u); ghostSide(ov, nb.after, ONION.after, u);
   }
   function tween(fn) {
     // Parts glide from where they were to where they are now, then the ghosts appear.
@@ -452,7 +469,7 @@
     fn();
     clearTimeout(S.tweenT); S.tweenT = setTimeout(() => { scr().classList.remove('kit-tween'); S.tweening = false; schedule(); }, ms + 40);
   }
-  function savePrefs() { if (store) try { store.setItem('kit:prefs', JSON.stringify({ inspect: S.inspect, onion: S.onion })); } catch (e) { } }
+  function savePrefs() { if (store) try { store.setItem('kit:prefs', JSON.stringify({ inspect: S.inspect, onion: S.onion, onionDepth: S.onionDepth })); } catch (e) { } }
 
   /* ---------- overlay on the screen ---------- */
   function drawOv() {
@@ -1109,7 +1126,7 @@
     const canvas = h('div', { class: 'kit-canvas' }, el.rt, el.rl, el.box);
     document.body.append(h('div', { class: 'kit-stage' }, el.dock, el.panel, canvas, el.insp));
     S.open = !(window.innerWidth <= 600);
-    load(); try { const pr = store && JSON.parse(store.getItem('kit:prefs') || '{}'); if (pr && typeof pr.inspect === 'boolean') S.inspect = pr.inspect; if (pr && [0, 1, 2].includes(pr.onion)) S.onion = pr.onion; } catch (e) { }
+    load(); try { const pr = store && JSON.parse(store.getItem('kit:prefs') || '{}'); if (pr && typeof pr.inspect === 'boolean') S.inspect = pr.inspect; if (pr && [0, 1, 2].includes(pr.onion)) S.onion = pr.onion; if (pr && [1, 2].includes(pr.onionDepth)) S.onionDepth = pr.onionDepth; } catch (e) { }
     document.body.classList.toggle('kit-edit', S.inspect);
     applyLook(); applyMotion(); bindLayer(); bindKeys(); bindTips(); bindOutside();
     renderPanel(); layout(); applyAll(); render();
@@ -1128,7 +1145,7 @@
     setLauncher(shape) { S.launcher = shape; renderLauncher(); renderPanel(); },
     changesText, undo, redo, align, distribute, group, ungroup, nudge, field: applyField,
     setAlignTo(v) { S.alignTo = v; render(); },
-    inspect: v => setInspect(v !== false), deselect, onion(i) { S.onion = i; savePrefs(); renderPanel(); render(); }, note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
+    inspect: v => setInspect(v !== false), deselect, onion(i, depth) { S.onion = i; if (depth) S.onionDepth = depth; savePrefs(); renderPanel(); render(); }, note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
     lock: toggleLock, saveVersion, view: setViewing, makeDraft, versions: () => S.versions.map(v => v.name),
     tap(name, shift) { const el = S.root.querySelector('[data-name="' + CSS.escape(name) + '"]'); if (!el) return false; tapSelect({ target: el, shift: !!shift, deep: false }); render(); return true; },
     setGap(v) { S.gapVal = String(v); },

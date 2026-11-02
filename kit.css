@@ -140,4 +140,4 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
 .kit-screen.kit-tween .kit-root *{transition:translate calc(.42s*var(--k)) cubic-bezier(.3,1.15,.5,1),width calc(.42s*var(--k)) cubic-bezier(.3,1.15,.5,1),height calc(.42s*var(--k)) cubic-bezier(.3,1.15,.5,1),border-radius calc(.42s*var(--k)) ease!important}
 .kit-onion-key{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:11px;color:var(--k-fg2)}
 .kit-onion-key span{display:inline-flex;align-items:center;gap:5px}
-.kit-onion-key i{display:inline-block;width:10px;height:10px;border-radius:3px;opacity:.85}
+.kit-onion-key i{display:inline-block;width:10px;height:10px;border-radius:3px}
