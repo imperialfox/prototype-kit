@@ -7,7 +7,10 @@ Opens the page headless on a computer-sized window and a phone-sized one, then:
   errors, sideways scroll, and "NaN", "undefined" or "null" on the prototype's screen;
 - saves screenshots of light, dark, iPad, Inspect and Skeleton;
 - tries the editing tools: pick, nudge, drag, number box, align, group, lock, versions, onion skin,
-  copies, guides, Transform Again, deselect, hover tips, undo, redo, copy changes, and reload.
+  copies, guides, Transform Again, deselect, hover tips, undo, redo, copy changes, and reload;
+- with a stand-in for the page's own store on claude.ai: notes in note format v1 (SHARED.md), kept
+  statuses, nothing typed stored, another device's changes, a fresh device, and the shared header;
+- the "Real app" overlay: Over lines up with a screenshot at iPhone size, Beside sits next to the phone.
 Prints a short report and exits with 1 if anything failed.
 """
 import functools
@@ -21,6 +24,165 @@ import threading
 from playwright.sync_api import sync_playwright
 
 BAD = re.compile(r"\b(NaN|undefined|null)\b")
+
+
+KIT = pathlib.Path(__file__).resolve().parent.parent
+
+# A stand-in for claude.ai's page store (claude.use('db')), kept in sessionStorage so it outlives a reload.
+FAKE_STORE = r"""(() => {
+  const docs = JSON.parse(sessionStorage.getItem('__fakeDocs') || '{}'), subs = [];
+  const persist = () => sessionStorage.setItem('__fakeDocs', JSON.stringify(docs));
+  const fire = () => setTimeout(() => subs.forEach(f => f()), 0);
+  const copy = v => JSON.parse(JSON.stringify(v));
+  const snap = p => ({ id: p.split('/').pop(), exists: p in docs, data: () => copy(docs[p]) });
+  const docRef = p => ({
+    set: async v => { docs[p] = copy(v); persist(); fire(); },
+    update: async v => { docs[p] = Object.assign({}, docs[p], copy(v)); persist(); fire(); },
+    delete: async () => { delete docs[p]; persist(); fire(); },
+    onSnapshot(cb) { const f = () => cb(snap(p)); subs.push(f); setTimeout(f, 0); return () => {}; } });
+  const colRef = n => ({ doc: id => docRef(n + '/' + id),
+    onSnapshot(cb) { const f = () => cb({ docs: Object.keys(docs).filter(k => k.startsWith(n + '/') && k.split('/').length === 2).map(snap), metadata: { fromCache: false } }); subs.push(f); setTimeout(f, 0); return () => {}; } });
+  window.__store = { docs, set(p, v) { docs[p] = copy(v); persist(); fire(); } };
+  window.claude = { use: async n => (n === 'db' ? { doc: docRef, collection: colRef } : null) };
+})();"""
+
+# A made-up "real app" screenshot at iPhone size: red lines at x 100 and y 200.
+REAL_SVG = "data:image/svg+xml;utf8," + (
+    "<svg xmlns='http://www.w3.org/2000/svg' width='402' height='874'>"
+    "<rect width='402' height='874' fill='white'/><rect x='100' width='4' height='874' fill='red'/>"
+    "<rect y='200' width='402' height='4' fill='red'/></svg>").replace("<", "%3C").replace(">", "%3E").replace("#", "%23")
+
+
+def store_and_real_checks(browser, url, shots, problems, notes):
+    def ready(page):
+        page.wait_for_function("window.Kit && document.querySelector('.kit-screen')")
+        page.wait_for_function("Kit.store().state !== 'loading'", timeout=5000)
+        page.wait_for_timeout(150)
+
+    def parts(page):
+        return page.evaluate("""() => [...document.querySelectorAll('.kit-root [data-name]')]
+          .filter(e => { const r = e.getBoundingClientRect(); return r.width > 4 && r.height > 4 && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.tagName) && !e.closest('[aria-hidden=true]'); })
+          .map(e => e.getAttribute('data-name')).filter((n, i, a) => a.indexOf(n) === i && document.querySelectorAll('[data-name="' + CSS.escape(n) + '"]').length === 1).slice(0, 3)""")
+
+    def proto_notes(page):
+        return page.evaluate("Object.entries(__store.docs).filter(([k, v]) => k.startsWith('notes/') && v.source === 'prototype').map(([k, v]) => Object.assign({ path: k }, v))")
+
+    # 1. Store on: notes in note format v1
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx.add_init_script(FAKE_STORE)
+    page = ctx.new_page(); errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(url); ready(page)
+    page.evaluate("localStorage.clear(); sessionStorage.removeItem('__fakeDocs')"); page.reload(); ready(page)
+    if page.evaluate("Kit.store().state") != "ok":
+        problems.append("store: didn't connect to the page's store"); ctx.close(); return
+    if "kept on this page" not in page.inner_text(".kit-store"):
+        problems.append("store: the panel doesn't say notes are kept on the page")
+    names = parts(page)
+    if len(names) < 2:
+        notes.append("store: fewer than two named parts, store checks skipped"); ctx.close(); return
+    a, b = names[0], names[1]
+    page.evaluate(f"Kit.tap({json.dumps(a)})"); page.evaluate("Kit.nudge(0, 8)"); page.evaluate("Kit.note('Make this bigger')")
+    page.evaluate(f"Kit.tap({json.dumps(b)})"); page.evaluate("Kit.note('Check the wording')")
+    page.evaluate("Kit.push()"); page.wait_for_timeout(200)
+    recs = {r["part"]: r for r in proto_notes(page)}
+    ra = recs.get(a)
+    if not ra:
+        problems.append(f"store: no note record for {a}")
+    else:
+        need = ["v", "n", "source", "app", "screen", "part", "name", "text", "kind", "status", "box", "px", "element", "edits", "from", "created", "updated"]
+        miss = [k for k in need if k not in ra]
+        if miss: problems.append(f"store: record misses {miss}")
+        if ra.get("v") != 1 or ra.get("source") != "prototype" or ra.get("status") != "open": problems.append(f"store: wrong v/source/status {ra.get('v')}, {ra.get('source')}, {ra.get('status')}")
+        if ra.get("text") != "Make this bigger": problems.append("store: note text wrong")
+        if (ra.get("edits") or {}).get("move", {}).get("dy") != 8: problems.append(f"store: move not recorded: {ra.get('edits')}")
+        bx = ra.get("box") or {}
+        if not all(0 <= bx.get(k, -1) <= 1 for k in "xywh"): problems.append(f"store: box isn't in fractions: {bx}")
+        if not (ra.get("element") or {}).get("tag"): problems.append("store: element details missing")
+        if (ra.get("from") or {}).get("kit") != "1.1.0": problems.append("store: from.kit isn't 1.1.0")
+    draft = page.evaluate("__store.docs['kit/draft']")
+    if not draft or not draft.get("model", {}).get("edits"): problems.append("store: draft not kept on the page")
+    # nothing typed is ever stored
+    has_input = page.evaluate("!!document.querySelector('.kit-root input')")
+    if has_input:
+        page.evaluate("Kit.inspect(false)"); page.fill(".kit-root input", "secret words typed"); page.evaluate("Kit.inspect(true)")
+        page.evaluate("Kit.select(document.querySelector('.kit-root input'))"); page.evaluate("Kit.note('Search note')")
+        page.evaluate("Kit.push()"); page.wait_for_timeout(200)
+        if "secret words" in json.dumps(page.evaluate("__store.docs")): problems.append("store: text typed into a field was stored")
+    # statuses set by Claude are kept; a changed note reopens a fixed one
+    if ra:
+        path = ra["path"]
+        page.evaluate(f"__store.set({json.dumps(path)}, Object.assign({{}}, __store.docs[{json.dumps(path)}], {{ status: 'looking' }}))")
+        page.wait_for_timeout(100); page.evaluate("Kit.push()"); page.wait_for_timeout(200)
+        if page.evaluate(f"__store.docs[{json.dumps(path)}].status") != "looking": problems.append("store: a status set by Claude wasn't kept")
+        page.evaluate(f"__store.set({json.dumps(path)}, Object.assign({{}}, __store.docs[{json.dumps(path)}], {{ status: 'fixed' }}))")
+        page.wait_for_timeout(100)
+        page.evaluate(f"Kit.tap({json.dumps(a)})"); page.evaluate("Kit.note('Make this bigger still')"); page.evaluate("Kit.push()"); page.wait_for_timeout(200)
+        if page.evaluate(f"__store.docs[{json.dumps(path)}].status") != "open": problems.append("store: a changed note didn't reopen")
+    # the shared header on Copy changes
+    head = page.evaluate("Kit.changesText()").split("\n")
+    if not head[0].startswith("Prototype changes · note format v1") or "Source: prototype" not in head[1] or "Kit 1.1.0" not in head[1] or "Version: " not in head[1]:
+        problems.append(f"header: not the shared header: {head[:2]}")
+    # another device changes the draft: this page picks it up, and Undo puts it back
+    page.evaluate(f"""__store.set('kit/draft', {{ v: 1, model: {{ v: 1, edits: {{ {json.dumps('n:' + b)}: {{ name: {json.dumps(b)}, dx: 0, dy: 6 }} }} }}, t: Date.now() + 60000, by: 'other-device' }})""")
+    page.wait_for_timeout(300)
+    st = page.evaluate("Kit.state()")
+    if list(st["edits"].keys()) != ["n:" + b] or (st["undo"] or [None])[-1] != "Changes from another device":
+        problems.append(f"store: another device's changes weren't picked up: {list(st['edits'].keys())}, {st['undo'][-1:]}")
+    page.wait_for_timeout(700)
+    # a fresh device (nothing saved locally) opens with what the page keeps
+    page.evaluate("localStorage.clear()"); page.reload(); ready(page); page.wait_for_timeout(200)
+    if list(page.evaluate("Kit.state()")["edits"].keys()) != ["n:" + b]: problems.append("store: a fresh device didn't open with the page's changes")
+    if len(proto_notes(page)) != 1: problems.append(f"store: notes didn't follow the draft ({len(proto_notes(page))} records)")
+    page.evaluate("Kit.clear()"); page.evaluate("Kit.push()"); page.wait_for_timeout(200)
+    if proto_notes(page): problems.append("store: notes stayed after the changes were cleared")
+    if errors: problems.append(f"store: error: {errors[-1]}")
+    ctx.close()
+
+    # 2. Store off: kept on the device, as in 1.0
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900}); page = ctx.new_page()
+    page.goto(url); ready(page)
+    if page.evaluate("Kit.store().state") != "local" or "kept on this device" not in page.inner_text(".kit-store"):
+        problems.append("store: without the page's store it should say notes are kept on this device")
+    ctx.close()
+
+    # 3. Real app over and beside, computer and phone
+    for label, vp, mobile in [("computer", {"width": 1280, "height": 900}, False), ("phone", {"width": 402, "height": 874}, True)]:
+        ctx = browser.new_context(viewport=vp, device_scale_factor=2, has_touch=mobile, is_mobile=mobile); page = ctx.new_page(); errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(url); ready(page); page.evaluate("localStorage.clear()"); page.reload(); ready(page)
+        page.evaluate(f"Kit.real({json.dumps(REAL_SVG)}, 1); Kit.set('Strength', 2)")
+        page.wait_for_function("document.querySelector('.kit-real').complete")
+        page.wait_for_timeout(150)
+        opts = next((g["options"] for g in page.evaluate("Kit.groups()") if g["name"] == "Real app"), None)
+        want = ["Off", "Over"] if mobile else ["Off", "Over", "Beside"]
+        if opts != want: problems.append(f"real · {label}: options {opts}, expected {want}")
+        g = page.evaluate("""() => { const i = document.querySelector('.kit-real').getBoundingClientRect(), s = document.querySelector('.kit-screen').getBoundingClientRect();
+          return { dl: i.left - s.left, dt: i.top - s.top, dw: i.width - s.width, ratio: i.height / i.width, shown: getComputedStyle(document.querySelector('.kit-real')).display, scale: s.width / 402, sl: s.left, st: s.top }; }""")
+        if g["shown"] != "block" or abs(g["dl"]) > .5 or abs(g["dt"]) > .5 or (not mobile and abs(g["dw"]) > .5) or abs(g["ratio"] - 874 / 402) > .01:
+            problems.append(f"real · {label}: overlay doesn't line up with the screen: {g}")
+        if not mobile:
+            # the red line at x 100 shows exactly 100 points in from the screen's left edge
+            from PIL import Image
+            shot = shots / f"{label}_real_over.png"; page.screenshot(path=str(shot))
+            im = Image.open(shot).convert("RGB"); dpr = 2
+            y = int((g["st"] + 400 * g["scale"]) * dpr)
+            reds = [x for x in range(im.width) if (lambda p: p[0] > 180 and p[1] < 120 and p[2] < 120)(im.getpixel((x, y)))]
+            x0 = (g["sl"] + 100 * g["scale"]) * dpr
+            if not reds or abs(reds[0] - x0) > 2 * dpr: problems.append(f"real · {label}: red line at {reds[:1]}, expected about {x0:.0f}")
+            page.evaluate("Kit.original(true)")
+            if page.evaluate("getComputedStyle(document.querySelector('.kit-real')).display") != "none": problems.append("real: Show original should hide the overlay")
+            page.evaluate("Kit.original(false); Kit.set('Real app', 2)"); page.wait_for_timeout(150)
+            sb = page.evaluate("""() => { const a = document.querySelector('.kit-real-side img').getBoundingClientRect(), s = document.querySelector('.kit-screen').getBoundingClientRect(), de = document.documentElement;
+              return { left: a.left - s.right, dt: a.top - s.top, dw: a.width - s.width, side: de.scrollWidth > innerWidth + 1, over: getComputedStyle(document.querySelector('.kit-real')).display }; }""")
+            if sb["left"] < 10 or abs(sb["dt"]) > .5 or abs(sb["dw"]) > .5 or sb["side"] or sb["over"] != "none":
+                problems.append(f"real · {label}: Beside isn't next to the phone at the same size: {sb}")
+            page.screenshot(path=str(shots / f"{label}_real_beside.png"))
+        else:
+            page.screenshot(path=str(shots / f"{label}_real_over.png"))
+        if errors: problems.append(f"real · {label}: error: {errors[-1]}")
+        ctx.close()
+    notes.append("store and real app: checked")
 
 
 def serve(folder: pathlib.Path):
@@ -37,8 +199,10 @@ def main():
     page_path = pathlib.Path(sys.argv[1]).resolve()
     shots = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else "kit-check").resolve()
     shots.mkdir(parents=True, exist_ok=True)
-    srv = serve(page_path.parent)
-    url = f"http://127.0.0.1:{srv.server_address[1]}/{page_path.name}"
+    # Serve the kit's own folder when the page lives inside it (so tools/plain.html finds ../kit.js).
+    base = KIT if KIT in page_path.parents else page_path.parent
+    srv = serve(base)
+    url = f"http://127.0.0.1:{srv.server_address[1]}/{page_path.relative_to(base).as_posix()}"
     problems, notes = [], []
 
     with sync_playwright() as pw:
@@ -379,6 +543,7 @@ def main():
             page.evaluate("localStorage.clear()")
             notes.append(f"{label}: {sum(len(g['options']) for g in groups)} control states checked")
             ctx.close()
+        store_and_real_checks(browser, url, shots, problems, notes)
         browser.close()
     srv.shutdown()
     print(json.dumps({"ok": not problems, "problems": problems, "notes": notes, "screenshots": str(shots)}, indent=2))

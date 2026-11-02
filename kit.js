@@ -1,4 +1,4 @@
-/* Prototype kit 1.0.0 · MIT · https://github.com/imperialfox/prototype-kit
+/* Prototype kit 1.1.0 · MIT · https://github.com/imperialfox/prototype-kit
    Shared frame, controls, inspector and editing tools for clickable app prototypes, for any app.
    Prototype-only: nothing here is ever built into an app.
    Use: put the app in one element (e.g. <div id="app">), then call Kit.start({ app: 'Your app', root: '#app', controls: [...] }). */
@@ -13,6 +13,7 @@
   const STY = { 68: 'Big numeral', 56: 'Big numeral', 44: 'Big numeral', 34: 'Large title', 28: 'Title 1', 22: 'Title 2', 20: 'Title 3', 17: 'Body', 16: 'Callout', 15: 'Subhead', 13: 'Footnote', 12: 'Caption 1', 11: 'Caption 2' };
   const PINK = '#e0457b', BLUE = '#007aff', RED = '#ff3b30', NS = 'http://www.w3.org/2000/svg';
   const RO = 'This version is read-only. Use “Make this the draft” to change it.', LOCKED = 'Locked. Double-click it to unlock.';
+  const VERSION = '1.1.0';
   const AN = { l: 'Align left', c: 'Align centre', r: 'Align right', t: 'Align top', m: 'Align middle', b: 'Align bottom' };
 
   const S = {
@@ -21,7 +22,8 @@
     sel: [], key: null, multi: false, snap: true, alignTo: 'key', original: false, versions: [], viewing: -1, draftModel: null, saving: false, lastTap: null,
     model: { v: 1, edits: {} }, undo: [], redo: [], lastNudge: 0, nextGroup: 1,
     hover: null, ptr: null, guides: [], cursor: null, err: '', status: '', showText: false, copied: null,
-    inspShut: true, tok: new Map(), touched: new Set(), raf: 0, lsKey: ''
+    inspShut: true, tok: new Map(), touched: new Set(), raf: 0, lsKey: '',
+    real: {}, realMode: 0, realStrength: 1
   };
 
   /* ---------- small helpers ---------- */
@@ -231,9 +233,7 @@
   function changesText() {
     const list = changeList(), gs = groupsList();
     if (!list.length && !gs.length) return '';
-    const d = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    const vn = S.viewing >= 0 ? ` · version “${S.versions[S.viewing].name}”` : '';
-    const lines = [`Changes to the ${S.opts.app ? S.opts.app + ' ' : ''}prototype${S.opts.title ? ' (' + S.opts.title + ')' : ''}${vn}, ${d}`, `Measured in ${S.device === 'ipad' ? 'iPad' : S.device === 'mac' ? 'Mac' : 'iPhone'} points.`, ''];
+    const lines = headerLines().concat(['']);
     list.forEach((c, i) => {
       const e = c.e, parts = [], mv = [];
       if (e.dup) {
@@ -256,10 +256,24 @@
     return lines.join('\n');
   }
 
+  function headerLines() {
+    // The shared header (SHARED.md, note format v1): pasted changes and stored notes say the same things.
+    const d = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const o = S.opts, scrn = o.title || o.screen ? `${o.title || o.screen}${o.title && o.screen ? ' (' + o.screen + ')' : ''}` : '';
+    const ver = (o.version ? o.version + ', ' : '') + (S.viewing >= 0 ? `version “${S.versions[S.viewing].name}”` : 'Draft');
+    const bits = ['Source: prototype', o.app ? 'App: ' + o.app : '', scrn ? 'Screen: ' + scrn : '', 'Prototype: ' + o.id, 'Version: ' + ver, 'Kit ' + VERSION].filter(Boolean);
+    return [`Prototype changes · note format v1 · ${d}`, bits.join(' · '), `Measured in ${DEV[S.device].label} points.`];
+  }
+
   /* ---------- undo and saving ---------- */
   const snapM = () => ({ m: JSON.stringify(S.model), sel: liveSel().map(keyOf), key: S.key ? keyOf(S.key) : null });
   function saveVersions() { if (!store) return; try { store.setItem(S.lsKey + ':versions', JSON.stringify(S.versions)); } catch (e) { S.err = "Couldn't keep the versions on this device"; } }
-  function save() { if (!store || S.viewing >= 0) return; try { store.setItem(S.lsKey, JSON.stringify(S.model)); } catch (e) { S.err = "Couldn't keep your changes on this device"; } }
+  function save(fromStore) {
+    if (S.viewing >= 0) return;
+    if (!fromStore) SYNC.t = Math.max(Date.now(), SYNC.t + 1);
+    if (store) try { store.setItem(S.lsKey, JSON.stringify(S.model)); store.setItem(S.lsKey + ':t', String(SYNC.t)); } catch (e) { S.err = "Couldn't keep your changes on this device"; }
+    if (!fromStore) pushSoon();
+  }
   function load() {
     if (!store) return;
     try {
@@ -298,6 +312,140 @@
   function undo() { S.err = ''; if (S.viewing >= 0) { S.err = 'Go back to Draft to undo'; return render(); } if (!S.undo.length) { S.status = 'Nothing to undo'; return render(); } const u = S.undo.pop(); S.redo.push({ name: u.name, st: snapM() }); restore(u.st); S.status = 'Undid ' + u.name.toLowerCase(); render(); }
   function redo() { S.err = ''; if (S.viewing >= 0) { S.err = 'Go back to Draft to redo'; return render(); } if (!S.redo.length) { S.status = 'Nothing to redo'; return render(); } const u = S.redo.pop(); S.undo.push({ name: u.name, st: snapM() }); restore(u.st); S.status = 'Redid ' + u.name.toLowerCase(); render(); }
 
+  /* ---------- notes in the shared format (SHARED.md, note format v1) ---------- */
+  const TYPED = el => !el || el.isContentEditable || /^(input|textarea|select)$/i.test(el.tagName);
+  function elPath(el) {
+    const out = []; let e = el;
+    while (e && e !== S.root && out.length < 6) {
+      const c = [...(e.classList || [])].filter(x => !x.startsWith('kit-')).slice(0, 2);
+      out.unshift(e.tagName.toLowerCase() + (c.length ? '.' + c.join('.') : '')); e = e.parentElement;
+    }
+    return out.join(' > ');
+  }
+  function elDetail(el) {
+    if (!el) return null;
+    const cs = getComputedStyle(el), txt = TYPED(el) ? '' : (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    return { tag: el.tagName.toLowerCase(), cls: [...el.classList].filter(x => !x.startsWith('kit-')).join(' '), text: txt, path: elPath(el),
+      style: { font: cs.fontSize + ' ' + cs.fontWeight, lh: cs.lineHeight, color: cs.color, bg: cs.backgroundColor, pad: cs.padding, radius: cs.borderTopLeftRadius } };
+  }
+  function hashOf(t) { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x * 33) ^ t.charCodeAt(i)) >>> 0; return x.toString(36); }
+  const noteId = k => 'p-' + k.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40) + '-' + hashOf(k);
+  function editsOf(e) {
+    const o = {};
+    if (e.dx || e.dy) o.move = { dx: e.dx || 0, dy: e.dy || 0 };
+    if (e.w != null) o.width = [e.w0, e.w]; if (e.h != null) o.height = [e.h0, e.h]; if (e.r != null) o.corners = [e.r0, e.r];
+    if (e.dup) o.copyOf = e.dup.ofName;
+    return o;
+  }
+  function noteRecords() {
+    // One record per part with a note or a change, in the draft as it is on screen now.
+    const W = scr().offsetWidth || 1, H = scr().offsetHeight || 1, out = new Map();
+    for (const k in S.model.edits) {
+      const e = S.model.edits[k], ed = editsOf(e);
+      if (!e.note && !Object.keys(ed).length) continue;
+      const el = elOf(k), r = el ? rectOf(el) : { x: 0, y: 0, w: 0, h: 0 }, f = v => Math.round(v * 10) / 10;
+      out.set(noteId(k), {
+        v: 1, source: 'prototype', app: S.opts.app || '', screen: S.opts.screen || '', screenTitle: S.opts.title || '',
+        part: el && el.getAttribute('data-name') && !el.dataset.kitDup ? el.getAttribute('data-name') : null, name: e.name, key: k,
+        text: (e.note || '').trim(), kind: '', status: 'open',
+        box: { x: +(r.x / W).toFixed(4), y: +(r.y / H).toFixed(4), w: +(r.w / W).toFixed(4), h: +(r.h / H).toFixed(4) },
+        px: { x: f(r.x), y: f(r.y), w: f(r.w), h: f(r.h) }, device: S.device,
+        element: elDetail(el), edits: ed,
+        from: { prototype: S.opts.id, version: S.opts.version || '', kit: VERSION }
+      });
+    }
+    return out;
+  }
+  const sigOf = r => JSON.stringify([r.text, r.edits, r.part, r.name]);
+
+  /* ---------- the page's own store on claude.ai, so Claude can read the notes ---------- */
+  const SYNC = { db: null, state: 'local', t: 0, by: Math.random().toString(36).slice(2, 10), timer: 0, ready: false, notes: new Map(), notesIn: false, busy: false, again: false };
+  function pushSoon(ms) { if (!SYNC.db || !SYNC.ready) return; clearTimeout(SYNC.timer); SYNC.timer = setTimeout(push, ms == null ? 500 : ms); }
+  async function push() {
+    if (S.viewing >= 0) return; // notes describe the draft; they catch up on the way back to Draft
+    if (!SYNC.notesIn) return pushSoon(300);
+    if (SYNC.busy) { SYNC.again = true; return; }
+    SYNC.busy = true;
+    const db = SYNC.db, now = new Date().toISOString();
+    try {
+      await db.doc('kit/draft').set({ v: 1, model: { v: 1, edits: S.model.edits }, t: SYNC.t, by: SYNC.by, updated: now, kit: VERSION, prototype: S.opts.id });
+      const want = noteRecords(); let n = Math.max(0, ...[...SYNC.notes.values()].map(x => x.n || 0));
+      for (const [id, r] of want) {
+        const old = SYNC.notes.get(id);
+        r.n = old && old.n ? old.n : ++n;
+        r.created = old && old.created || now;
+        // Claude or Ivan may have set a status; keep it, unless the note or change itself has changed since.
+        if (old && old.status) r.status = sigOf(old) === sigOf(r) || !['fixed', 'dismissed'].includes(old.status) ? old.status : 'open';
+        const same = old && JSON.stringify(Object.assign({}, old, { updated: 0 })) === JSON.stringify(Object.assign({}, r, { updated: 0 }));
+        if (same) continue;
+        r.updated = now;
+        await db.collection('notes').doc(id).set(r); SYNC.notes.set(id, r);
+      }
+      for (const [id, old] of [...SYNC.notes]) if (old.source === 'prototype' && !want.has(id)) { await db.collection('notes').doc(id).delete(); SYNC.notes.delete(id); }
+      SYNC.state = 'ok';
+    } catch (e) { SYNC.state = 'error'; SYNC.code = e && e.code; }
+    SYNC.busy = false; if (SYNC.shown !== SYNC.state) renderPanel();
+    if (SYNC.again) { SYNC.again = false; pushSoon(0); }
+  }
+  function adopt(v, live) {
+    const m = { v: 1, edits: cleanEdits((v.model && v.model.edits) || {}) };
+    SYNC.t = Math.max(SYNC.t, v.t || 0);
+    const cur = S.viewing >= 0 ? S.draftModel : S.model;
+    if (JSON.stringify(m.edits) === JSON.stringify(cur.edits)) return;
+    if (S.viewing >= 0) S.draftModel = m;
+    else {
+      if (live) { S.undo.push({ name: 'Changes from another device', st: snapM() }); S.redo = []; S.status = 'Updated with changes made on another device'; }
+      S.model = m; S.sel = S.sel.filter(el => el.isConnected); applyAll();
+    }
+    S.nextGroup = 1 + Math.max(0, ...Object.values(m.edits).map(e => e.g || 0));
+    if (store) try { store.setItem(S.lsKey, JSON.stringify(m)); store.setItem(S.lsKey + ':t', String(SYNC.t)); } catch (e) { }
+    render();
+  }
+  async function connectStore() {
+    let db = null;
+    try { if (typeof claude !== 'undefined' && claude && claude.use) db = await claude.use('db'); } catch (e) { }
+    if (!db) { SYNC.state = 'local'; renderPanel(); return; }
+    SYNC.db = db; SYNC.state = 'loading'; renderPanel();
+    let first = true;
+    try {
+      db.collection('notes').onSnapshot(snap => { SYNC.notes = new Map(snap.docs.map(d => [d.id, d.data()])); SYNC.notesIn = true; }, () => { });
+      db.doc('kit/draft').onSnapshot(d => {
+        const v = d.exists ? d.data() : null;
+        if (first) {
+          first = false; SYNC.ready = true; SYNC.state = 'ok';
+          // Whichever is newer wins: what this device has, or what the page keeps.
+          if (v && v.model && (v.t || 0) > SYNC.t) adopt(v, false);
+          pushSoon(0);
+          renderPanel(); return;
+        }
+        if (v && v.model && v.by !== SYNC.by && (v.t || 0) > SYNC.t && !S.ptr) adopt(v, true);
+      }, e => { SYNC.state = 'error'; SYNC.code = e && e.code; renderPanel(); });
+    } catch (e) { SYNC.state = 'error'; renderPanel(); }
+  }
+  function storeLine() {
+    const t = { local: 'Notes and changes are kept on this device', loading: 'Connecting to this page’s store…', ok: 'Notes and changes are kept on this page, so Claude can read them', error: 'Couldn’t reach this page’s store' + (SYNC.code ? ' (' + SYNC.code + ')' : '') + '. Kept on this device for now' }[SYNC.state];
+    SYNC.shown = SYNC.state;
+    return h('div', { class: 'kit-store is-' + SYNC.state, role: 'status' }, t);
+  }
+
+  /* ---------- the real app, from the Atlas, over or beside the prototype ---------- */
+  function realSrc() { return S.real[S.device] || ''; }
+  function setReal(src) {
+    S.real = !src ? {} : typeof src === 'string' ? { iphone: src } : Object.assign({}, src);
+    S.el.realImg.removeAttribute('src'); S.el.realSide.querySelector('img').removeAttribute('src');
+    if (!Object.keys(S.real).filter(k => DEV[k] && S.real[k]).length) S.realMode = 0;
+    renderPanel(); applyReal();
+  }
+  function applyReal() {
+    const src = realSrc(), mode = src ? (S.phone && S.realMode === 2 ? 1 : S.realMode) : 0;
+    const over = S.el.realImg, side = S.el.realSide, simg = side.querySelector('img');
+    if (mode && over.getAttribute('src') !== src) { over.src = src; simg.src = src; }
+    over.style.display = mode === 1 && !S.original ? 'block' : 'none';
+    over.style.opacity = String([0.3, 0.5, 0.8][S.realStrength]);
+    side.style.display = mode === 2 ? 'block' : 'none';
+    document.body.classList.toggle('kit-beside', mode === 2);
+  }
+
   /* ---------- controls panel ---------- */
   function groups() {
     const devs = ['iphone', 'ipad'].concat(S.opts.mac ? ['mac'] : []);
@@ -310,6 +458,11 @@
     if (S.versions.length) g.push({ name: 'Version', options: ['Draft'].concat(S.versions.map(v => v.name)), get: () => S.viewing + 1, set: i => setViewing(i - 1) });
     if (S.versions.length) g.push({ name: 'Onion skin', options: ['Off', 'Before', 'Both'], get: () => S.onion, set: i => { S.onion = i; savePrefs(); render(); } });
     if (S.versions.length && S.onion) g.push({ name: 'Layers', options: ['1', '2'], get: () => S.onionDepth - 1, set: i => { S.onionDepth = i + 1; savePrefs(); render(); } });
+    if (Object.keys(S.real).some(k => DEV[k] && S.real[k])) {
+      const opts = S.phone ? ['Off', 'Over'] : ['Off', 'Over', 'Beside'];
+      g.push({ name: 'Real app', options: opts, get: () => Math.min(S.realMode, opts.length - 1), set: i => { S.realMode = i; layout(); applyReal(); render(); } });
+      if (S.realMode === 1 || (S.phone && S.realMode)) g.push({ name: 'Strength', options: ['30%', '50%', '80%'], get: () => S.realStrength, set: i => { S.realStrength = i; applyReal(); } });
+    }
     S.opts.controls.forEach(c => g.push({ name: c.name, own: true, options: c.options, get: () => S.custom[c.name], set: i => { S.custom[c.name] = i; try { c.onChange && c.onChange(i, c.options[i]); } catch (e) { console.error(e); } if (S.skel) markText(); applyAll(); render(); } }));
     return g;
   }
@@ -336,7 +489,9 @@
         if (!nb.before.length && !nb.after.length) key.append(h('span', null, 'Nothing to compare on this side'));
         p.append(key);
       }
+      if (g.name === 'Real app' && S.realMode && !realSrc()) p.append(h('div', { class: 'kit-onion-key' }, h('span', null, `No real ${DEV[S.device].label} screenshot for this prototype`)));
     });
+    p.append(storeLine());
   }
   function renderLauncher() {
     const shape = S.phone ? 'tab' : S.launcher, l = S.el.launcher;
@@ -352,7 +507,7 @@
   function fire() { window.dispatchEvent(new CustomEvent('kit:change', { detail: api.get() })); }
   function applyLook() { scr().classList.toggle('dark', S.look === 1); scr().style.colorScheme = S.look ? 'dark' : 'light'; buildTokenMap(); }
   function applyMotion() { scr().style.setProperty('--k', S.motion === 1 ? '4' : '1'); scr().classList.toggle('motion-reduced', S.motion === 2); }
-  function setDevice(d) { S.device = d; ['iphone', 'ipad', 'mac'].forEach(x => scr().classList.toggle('is-' + x, x === d)); layout(); applyAll(); render(); }
+  function setDevice(d) { S.device = d; ['iphone', 'ipad', 'mac'].forEach(x => scr().classList.toggle('is-' + x, x === d)); layout(); applyAll(); renderPanel(); render(); }
   function setSkel(v) { S.skel = !!v; scr().classList.toggle('kit-skel', S.skel); if (S.skel) markText(); render(); }
   function setInspect(v) {
     S.inspect = !!v; document.body.classList.toggle('kit-edit', S.inspect);
@@ -388,12 +543,18 @@
       sc_.style.width = d.w + 'px'; sc_.style.height = d.h + 'px'; sc_.style.borderRadius = Math.max(0, d.r - b) + 'px';
       dv.style.borderWidth = b + 'px'; dv.style.borderRadius = d.r + 'px';
       const side = (S.open && wide ? 278 : 0) + (S.inspect && wide ? 316 : 0);
-      const availW = Math.max(220, window.innerWidth - 24 - side - 56);
+      const beside = S.realMode === 2 && realSrc();
+      const availW = Math.max(220, (window.innerWidth - 24 - side - 56 - (beside ? 24 : 0)) / (beside ? 2 : 1));
       const availH = Math.max(320, window.innerHeight - 24 - 26);
       const s = Math.max(0.2, Math.min(1, availW / (d.w + 2 * b), availH / (d.h + 2 * b)));
       S.scale = s; dv.style.transform = `scale(${s})`;
       bx.style.width = (d.w + 2 * b) * s + 'px'; bx.style.height = (d.h + 2 * b) * s + 'px';
+      const rs = S.el.realSide;
+      rs.style.left = ((d.w + 2 * b) * s + 24) + 'px'; rs.style.width = (d.w + 2 * b) * s + 'px'; rs.style.height = (d.h + 2 * b) * s + 'px';
+      rs.style.setProperty('--b', b * s + 'px'); rs.style.setProperty('--ir', Math.max(0, d.r - b) * s + 'px'); rs.style.borderRadius = d.r * s + 'px';
+      if (beside) bx.style.width = (2 * (d.w + 2 * b) * s + 24) + 'px';
     }
+    if (S.el.realImg) applyReal();
     positionRulers(); renderLauncher(); drawRulers(); drawOv();
   }
   function positionRulers() {
@@ -1134,7 +1295,7 @@
     det.addEventListener('toggle', () => { S.outlineOpen = det.open; });
     I.append(det);
     I.append(h('div', { class: 'kit-msg ' + (S.err ? 'err' : 'st'), role: 'status', 'aria-live': 'polite' }, S.err || S.status));
-    I.append(h('div', { class: 'kit-hint', style: 'margin-top:4px' }, 'Click outside the phone, or press Esc or ⇧⌘A, to deselect. Arrows nudge by 1, Shift + arrows by 10. Shift while dragging moves straight across or down; Option drags a copy; ⌘ skips snapping; ⌘D repeats. Delete removes a copy. Drag from a ruler for a guide. Rest the pointer on a button for a tip. Changes and versions are kept on this device.'));
+    I.append(h('div', { class: 'kit-hint', style: 'margin-top:4px' }, 'Click outside the phone, or press Esc or ⇧⌘A, to deselect. Arrows nudge by 1, Shift + arrows by 10. Shift while dragging moves straight across or down; Option drags a copy; ⌘ skips snapping; ⌘D repeats. Delete removes a copy. Drag from a ruler for a guide. Rest the pointer on a button for a tip. ' + (SYNC.state === 'ok' ? 'Changes and notes are kept on this page, where Claude can read them; versions stay on this device.' : 'Changes and versions are kept on this device.')));
     if (keep) { const n = I.querySelector(`[data-kf="${keep.kf}"]`); if (n) { n.value = keep.v; n.focus({ preventScroll: true }); try { n.setSelectionRange(keep.a, keep.b); } catch (e) { } } }
   }
 
@@ -1147,6 +1308,7 @@
     S.viewing = i; S.sel = []; S.key = null; S.err = ''; S.saving = false; S.showText = false; S.copied = null;
     S.status = i >= 0 ? `Viewing “${S.versions[i].name}”. It can't be changed.` : '';
     tween(applyAll); renderPanel(); render(); fire();
+    if (i < 0) pushSoon();
   }
   function saveVersion(name) {
     S.err = ''; const n = String(name || '').trim();
@@ -1259,7 +1421,7 @@
 
   /* ---------- start ---------- */
   function start(opts) {
-    S.opts = Object.assign({ app: '', id: location.pathname + location.search, root: '#app', controls: [], mac: false, launcher: 'circle', gaps: [16], margin: 16, title: '' }, opts || {});
+    S.opts = Object.assign({ app: '', id: location.pathname + location.search, root: '#app', controls: [], mac: false, launcher: 'circle', gaps: [16], margin: 16, title: '', screen: '', version: '', real: null, store: true }, opts || {});
     const root = typeof S.opts.root === 'string' ? document.querySelector(S.opts.root) : S.opts.root;
     if (!root) throw new Error('Kit: root not found');
     S.root = root; S.launcher = S.opts.launcher; S.lsKey = 'kit:' + S.opts.id;
@@ -1274,19 +1436,24 @@
     el.screen = h('div', { class: 'kit-screen is-iphone' });
     el.layer = h('div', { class: 'kit-layer', 'aria-hidden': 'true' });
     el.ov = sv('svg', { class: 'kit-ov', 'aria-hidden': 'true' });
+    el.realImg = h('img', { class: 'kit-real', alt: '', 'aria-hidden': 'true', draggable: 'false' });
+    el.realSide = h('div', { class: 'kit-real-side', 'aria-label': 'The real app' }, h('div', null, h('img', { alt: 'The real app, from the Atlas', draggable: 'false' })), h('span', null, 'Real app'));
     el.device = h('div', { class: 'kit-device' }, el.screen);
-    el.box = h('div', { class: 'kit-box' }, el.device);
+    el.box = h('div', { class: 'kit-box' }, el.device, el.realSide);
     el.insp = h('aside', { class: 'kit-insp', 'aria-label': 'Inspector' });
     root.classList.add('kit-root');
-    el.screen.append(root, el.ov, el.layer);
+    el.screen.append(root, el.realImg, el.ov, el.layer);
     const canvas = h('div', { class: 'kit-canvas' }, el.rt, el.rl, el.box);
     document.body.append(h('div', { class: 'kit-stage' }, el.dock, el.panel, canvas, el.insp));
     S.open = !(window.innerWidth <= 600);
     try { const g = JSON.parse((store && store.getItem('kit:' + S.opts.id + ':guides')) || '[]'); if (Array.isArray(g)) S.userGuides = g.filter(x => x && (x.a === 'x' || x.a === 'y') && Number.isFinite(x.v)).slice(0, 40); } catch (e) { }
-    load(); try { const pr = store && JSON.parse(store.getItem('kit:prefs') || '{}'); if (pr && typeof pr.inspect === 'boolean') S.inspect = pr.inspect; if (pr && [0, 1, 2].includes(pr.onion)) S.onion = pr.onion; if (pr && [1, 2].includes(pr.onionDepth)) S.onionDepth = pr.onionDepth; } catch (e) { }
+    load(); try { SYNC.t = +((store && store.getItem(S.lsKey + ':t')) || 0) || 0; } catch (e) { }
+    if (S.opts.real) S.real = typeof S.opts.real === 'string' ? { iphone: S.opts.real } : Object.assign({}, S.opts.real);
+    try { const pr = store && JSON.parse(store.getItem('kit:prefs') || '{}'); if (pr && typeof pr.inspect === 'boolean') S.inspect = pr.inspect; if (pr && [0, 1, 2].includes(pr.onion)) S.onion = pr.onion; if (pr && [1, 2].includes(pr.onionDepth)) S.onionDepth = pr.onionDepth; } catch (e) { }
     document.body.classList.toggle('kit-edit', S.inspect);
     applyLook(); applyMotion(); bindLayer(); bindKeys(); bindTips(); bindOutside(); bindGuides();
     renderPanel(); layout(); applyAll(); render();
+    if (S.opts.store !== false) connectStore();
     try { document.fonts && document.fonts.ready.then(() => { applyAll(); schedule(); }); } catch (e) { }
     let rz = 0; window.addEventListener('resize', () => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { layout(); renderPanel(); render(); }); });
     let mt = 0; new MutationObserver(() => { clearTimeout(mt); mt = setTimeout(() => { if (S.skel) markText(); applyAll(); schedule(); }, 30); }).observe(root, { childList: true, subtree: true });
@@ -1294,7 +1461,11 @@
   }
 
   const api = {
-    version: '1.0.0',
+    version: VERSION,
+    notes: () => [...noteRecords().entries()].map(([id, r]) => Object.assign({ id }, r)),
+    store: () => ({ state: SYNC.state, code: SYNC.code || null, notes: [...SYNC.notes.keys()], t: SYNC.t }),
+    real(src, mode) { if (src !== undefined) setReal(src); if (mode != null) { S.realMode = mode; layout(); applyReal(); renderPanel(); render(); } return { mode: S.realMode, src: realSrc() }; },
+    push: () => { clearTimeout(SYNC.timer); return push(); },
     start,
     get: () => ({ device: S.device, look: S.look, motion: S.motion, inspect: S.inspect, skeleton: S.skel, custom: Object.assign({}, S.custom) }),
     set(name, i) { const g = groups().find(x => x.name === name); if (!g) throw new Error('Kit: no control called ' + name); g.set(i); renderPanel(); fire(); },
@@ -1309,7 +1480,7 @@
     tap(name, shift) { const el = S.root.querySelector('[data-name="' + CSS.escape(name) + '"]'); if (!el) return false; tapSelect({ target: el, shift: !!shift, deep: false }); render(); return true; },
     setGap(v) { S.gapVal = String(v); },
     clear() { commit('Clear changes', () => { S.model.edits = {}; }); },
-    original(v) { S.original = !!v; applyAll(); render(); },
+    original(v) { S.original = !!v; applyAll(); applyReal(); render(); },
     refresh() { applyAll(); render(); },
     k: () => (S.motion === 1 ? 4 : 1),
     reduced: () => S.motion === 2,

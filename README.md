@@ -1,8 +1,8 @@
 # Prototype kit
 
-![version](https://img.shields.io/badge/version-1.0.0-007aff)
+![version](https://img.shields.io/badge/version-1.1.0-007aff)
 
-**Current version:** 1.0.0 · 2 Nov 2026 · [changelog](CHANGELOG.md)
+**Current version:** 1.1.0 · 2 Nov 2026 · [changelog](CHANGELOG.md)
 
 *Prototyping, but with a bit more power and manual adjustment that's intuitive.*
 
@@ -17,7 +17,11 @@ One shared kit for clickable app prototypes. Write the screens; the kit brings e
 - **Rulers** in points outside the frame. Drag from a ruler to make a guide.
 - **Moving and arranging:** drag, nudge with arrows, smart snapping, alignment to a key object, spacing, groups, locks, Option-drag copies, Shift-drag straight lines, a live distance tag, and Transform Again (⌘D).
 - **Undo and redo** for every step, **Copy changes** for a numbered list in points, **versions** saved on the device, and **onion skin** ghosts when switching between versions.
-- Changes, copies, versions and guides are kept on the device through reloads.
+- **Notes Claude can read:** published on claude.ai with the page's store switched on, every note and change is kept on the page in the shared note format ([SHARED.md](SHARED.md)), so saying "check my notes" in a Claude chat picks them up, and they reach your phone and computer. Anywhere else they stay on the device.
+- **Real app:** the Atlas's screenshot of the real screen over the prototype (with a strength) or beside it, to check the prototype against the live app.
+- Copies, versions and guides are kept on the device through reloads.
+
+**Works with the Atlas kit** (`imperialfox/atlas-kit`): the Atlas shows the real app and takes notes on it; the prototype tries a change. Both write notes in the same format, and [SHARED.md](SHARED.md) is identical in both repos.
 
 Try it: [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby). The demo's screen is a sample (a currency rate history page); the kit itself has no app's screens, names or colours.
 
@@ -27,8 +31,10 @@ Try it: [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby).
 2. Put the screens inside `<div id="app">`. Keep their styles under `#app`.
 3. Give each part a `data-name` in plain words ("Save button", "Total"). The inspector, Outline and Copy changes use these names.
 4. Add the prototype's own states to `controls`, each with an `onChange` that redraws the screen.
-5. Run `python tools/bundle.py my_prototype.html out.html` to make one self-contained file (needed where pages can't load other files, such as the Claude artifact viewer).
-6. Run `python tools/check.py out.html shots` before sharing it.
+5. If it changes a real screen, set `screen` (the Atlas's screen id) and, for the Real app overlay, copy the Atlas's screenshot into the page and set `real`.
+6. Run `python tools/bundle.py my_prototype.html out.html` to make one self-contained file (needed where pages can't load other files, such as the Claude artifact viewer).
+7. Run `python tools/check.py out.html shots` before sharing it.
+8. To keep notes where Claude can read them, publish it on claude.ai with the page's store (`db`) declared: everyone signed in who can open it reads, only you write (`rules: [{ path: '', read: 'interact', write: 'admin' }]`).
 
 ## Hooking a screen into the kit
 
@@ -38,6 +44,10 @@ Kit.start({
   title: 'settings screen', // optional
   id: 'your-app-settings-v1',
   root: '#app',             // the default
+  screen: 'settings',       // optional; the real screen this changes (its Atlas id)
+  version: '3',             // optional; this prototype's own version, in notes and the header
+  real: { iphone: 'real/settings-iphone.png' }, // optional; the Atlas screenshot for the Real app overlay
+  store: true,              // the default; set false to keep notes on the device even on claude.ai
   controls: [
     { name: 'Signal', options: ['Online', 'Offline'], onChange: i => redraw({ offline: i === 1 }) }
   ]
@@ -49,7 +59,16 @@ window.addEventListener('kit:change', e => {
 
 The screen gets Apple's base colours as variables (`--bg`, `--surface`, `--fg`, `--fg2`, `--fg3`, `--sep`, `--fill`, `--accent`), switched for Dark. `--k` is the motion speed (1 normal, 4 slow). The screen element also gets the classes `dark`, `is-iphone`, `is-ipad` or `is-mac`, and `motion-reduced`. An app with its own tokens can define them on its own root instead.
 
-Other calls (all on `window.Kit`): `get`, `set(name, i)`, `select(name)`, `tap(name, add)`, `nudge(dx, dy)`, `field(key, value)`, `align(side)`, `distribute(axis)`, `group`, `ungroup`, `lock`, `note(text)`, `again`, `undo`, `redo`, `saveVersion(name)`, `view(i)`, `makeDraft`, `onion(mode, layers)`, `inspect(on)`, `deselect`, `clearGuides`, `changesText`, `original(on)`, `clear`, `state`.
+Other calls (all on `window.Kit`): `get`, `set(name, i)`, `select(name)`, `tap(name, add)`, `nudge(dx, dy)`, `field(key, value)`, `align(side)`, `distribute(axis)`, `group`, `ungroup`, `lock`, `note(text)`, `again`, `undo`, `redo`, `saveVersion(name)`, `view(i)`, `makeDraft`, `onion(mode, layers)`, `inspect(on)`, `deselect`, `clearGuides`, `changesText`, `original(on)`, `clear`, `state`, `notes` (the draft's notes in note format v1), `store` (where notes are kept), `real(src, mode)` (mode 0 Off, 1 Over, 2 Beside), `push` (save to the page's store now).
+
+## Where notes are kept
+
+| Where the prototype is open | Notes and changes | Versions and guides |
+|---|---|---|
+| On claude.ai, with the page's store declared | On the page, in `notes` (one document per changed part, note format v1) and `kit/draft` (the draft itself) | On the device |
+| Anywhere else | On the device | On the device |
+
+When the page's store is on, whichever is newer wins when the prototype opens: what the device has or what the page keeps. Changes made on another device arrive while it's open, and Undo puts them back. The panel's last line says where notes are kept.
 
 ## Keys
 
@@ -69,13 +88,15 @@ Other calls (all on `window.Kit`): `get`, `set(name, i)`, `select(name)`, `tap(n
 ## Tools
 
 - `tools/bundle.py` swaps the page's `kit.css` link and `kit.js` script for the kit's own text.
-- `tools/check.py` opens the page headless at computer and phone sizes, goes through every control, and tries the editing tools. It reports errors, sideways scroll, and "NaN", "undefined" or "null" on screen. Needs Python and Playwright (`pip install playwright`, then `playwright install chromium`).
+- `tools/check.py` opens the page headless at computer and phone sizes, goes through every control, and tries the editing tools, the page's store (with a stand-in) and the Real app overlay. It reports errors, sideways scroll, and "NaN", "undefined" or "null" on screen. Needs Python and Playwright (`pip install playwright`, then `playwright install chromium`).
 
 ## Files
 
 - `kit.css`, `kit.js`: the kit.
 - `starter.html`: a blank prototype to copy.
-- `demo.html`: the kit with a sample screen.
+- `demo.html`: the kit with a sample screen; `assets/demo-real-iphone.png` is its sample "real app" picture.
+- `SHARED.md`: devices, looks, text styles and note format v1, identical in the Atlas kit.
+- `tools/plain.html`: a plain page with no app name, for checking the kit stays universal.
 - `HANDOFF.md`: what was approved and built.
 - `docs/blueprint.md`: the full plan and the decisions behind it.
 

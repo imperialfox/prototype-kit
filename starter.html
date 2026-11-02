@@ -34,6 +34,12 @@
     title: '',
     // A new id for each prototype, so its saved changes, versions and guides stay separate.
     id: 'new-prototype-v1',
+    // Which real screen this changes (its Atlas screen id, if the app has an Atlas), and this prototype's own version.
+    // They go into every note and the Copy changes header, so notes from here and from the Atlas read the same.
+    screen: '',
+    version: '',
+    // The Atlas screenshot of the real screen, copied into this page, for the "Real app" overlay. A file per device, or one for iPhone.
+    // real: { iphone: 'real/today-iphone.png' },
     // This prototype's own states, as short groups. The kit already has Device, Look, Motion and View.
     controls: [
       // { name: 'Signal', options: ['Online', 'Offline'], onChange: i => { /* redraw for state i */ } }

@@ -52,7 +52,7 @@ Not in scope: the four Illustrator ideas still offered, and everything under the
 ## Kit 1.1
 
 **Render:** 2 Nov 2026, 19:50. Ivan: "Render. This is how I want things to be. Building system in place to be more optimal."
-**Build:** awaiting Ivan's instruction.
+**Build:** 2 Nov 2026, 19:59 (Ivan: "build for Prototype kit 1.1"). Kit 1.1.0.
 
 Makes the Prototype kit work in tandem with the Atlas kit (`imperialfox/atlas-kit`, its own repo, no Q number), so notes from a prototype and notes from a real app's Atlas come back together when Ivan says "check my notes". Plan: Ivan's project notes, `claude/atlas_kit_prototype_kit_tandem_blueprint.md` (ask him to attach it).
 
@@ -79,3 +79,33 @@ Done when:
 - The "Real app" overlay lines up with an Atlas screenshot at iPhone size.
 - Copy changes starts with the shared header.
 - `tools/check.py` passes on the demo, the starter, the rebuilt rate history and a plain page with no app name.
+
+## Debrief · kit 1.1 (2 Nov 2026)
+
+**How it was built**
+- **`SHARED.md`** written as approved, plus a field table for note format v1 that follows the Atlas prototype's notes (`box` as fractions, `px` in points, `element` with `tag`, `cls`, `text`, `path`, `style`), so the Atlas kit can adopt it without renaming. Readers ignore fields they don't know.
+- **The page's store:** when `claude.use('db')` answers, the kit keeps the draft in `kit/draft` and one note per changed part in `notes` (ids start `p-`, so they never clash with Atlas notes). It writes half a second after a change, and only what changed. Whichever is newer when the page opens wins (the device's copy or the page's); another device's changes arrive while it's open and go on the undo list as "Changes from another device". Versions and guides stay on the device (not in scope).
+- **Statuses:** kept when the kit rewrites a note; a Fixed or Dismissed note reopens if its note or change is edited.
+- **Nothing typed is stored:** element text is left empty for text boxes and editable areas (checked by typing into the plain page's search box).
+- **Real app:** `real` start option (a file per device, or one string for iPhone) and a "Real app" control: Off, Over with Strength 30/50/80%, Beside (Off and Over on a phone). Show original hides it. The side frame uses padding rather than a border, because browsers round borders to whole device pixels and it sat 1 point off.
+- **Copy changes** now starts with the shared header (source, app, screen, prototype, version, kit). The inspector's hint and the panel's last line say where notes are kept.
+- **New:** start options `screen`, `version`, `real`, `store`; calls `Kit.notes()`, `Kit.store()`, `Kit.real(src, mode)`, `Kit.push()`. `tools/plain.html` (a plain Notes page with no app name) is now in the repo; `tools/check.py` serves the repo folder for pages inside it.
+- **Demo republished** ([Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby), version 1793650230-3126) with the page's store declared (everyone with access reads, only Ivan writes) and a sample "real app" picture (its own starting screen, `assets/demo-real-iphone.png`). Its store is empty and Claude can list it. The rebuilt Suki rate history page was checked on 1.1 but not republished (it isn't part of this kit's scope).
+
+**Tests** (`tools/check.py`, computer 1280 × 900 and phone 402 × 874, all passing)
+- Demo: 18 control states (17 on a phone), every editing tool, store and real app.
+- Rate history on 1.1: 20 control states, every editing tool, store and real app.
+- Plain page: 9 control states, every editing tool, store and real app.
+- Starter: 9 control states, store and real app.
+- New checks: a note record has every v1 field with the right move, box fractions and kit version; the draft is on the page; typed text is never stored; a status set by Claude is kept and a changed note reopens; the header; another device's change arrives and Undo lists it; a fresh device opens with the page's changes; clearing removes the notes; without the store the panel says "kept on this device"; Over lines up with a test picture at iPhone size (a red line at x 100 lands within a pixel of 100 points); Show original hides it; Beside sits next to the phone at the same size with no sideways scroll; a phone offers Off and Over only.
+
+**For your iPhone**
+- Open the demo in the Claude app, tap a part, write a note, then ask in any chat "check my notes on the Prototype kit demo".
+- Open the same demo on your Mac: the note and any moves should already be there.
+- Real app → Over: drag Strength and check the picture sits exactly on the screen.
+- On the Mac, Real app → Beside: the picture should be the same size, next to the phone.
+
+**Left for later**
+- Versions and guides on the page's store (only notes and the draft go there now).
+- The Atlas reading a prototype's notes: that's Atlas kit 1.0, next.
+

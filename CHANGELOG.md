@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.0 · 2 Nov 2026
+
+*Works with the Atlas kit: notes Claude can read, the real app beside the prototype, one shared format*
+
+**Notes Claude can read**
+- On claude.ai, with the page's store declared, every note and change is saved on the page in note format v1 (one document per changed part in `notes`, the draft in `kit/draft`), so "check my notes" in a Claude chat finds them, and they reach every device.
+- Statuses set by Claude or Ivan (Open, Looking into it, Fixed, Dismissed) are kept; a fixed or dismissed note reopens when it's edited.
+- Changes made on another device arrive while the prototype is open; Undo puts them back. When it opens, the newer of the device's copy and the page's copy wins.
+- Nothing typed into a field is stored. Elsewhere, notes stay on the device, as in 1.0. The panel says where they're kept.
+
+**Real app**
+- New "Real app" control: Off, Over (with Strength 30, 50 or 80%) or Beside, showing the Atlas's screenshot of the real screen. On a phone: Off or Over.
+
+**Handing back**
+- Copy changes starts with the shared header: source, app, screen, prototype, version and kit version.
+
+**Shared basics**
+- `SHARED.md`: devices, looks, text styles and note format v1, kept identical in the Atlas kit.
+
+**Tools**
+- New start options `screen`, `version`, `real` and `store`; new calls `notes`, `store`, `real` and `push`.
+- `tools/check.py` also checks the page's store (with a stand-in), note format v1, kept statuses, another device's changes, a fresh device, the header, and the Real app overlay lining up at iPhone size. `tools/plain.html` is the plain page it uses to prove the kit stays universal.
+
 ## 1.0.0 · 2 Nov 2026
 
 *First release of the prototype kit: one shared kit for any app's prototypes*

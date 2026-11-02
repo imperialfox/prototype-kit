@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plain page · kit check</title>
+<!-- A made-up Notes screen with no app name, used by tools/check.py to prove the kit stays universal. -->
+<link rel="stylesheet" href="../kit.css">
+<style>
+  #app{background:var(--bg,#f2f2f7);color:var(--fg,#000);overflow:auto}
+  .nav{padding:58px 16px 8px}
+  .nav h1{font-size:34px;font-weight:700;margin:0;letter-spacing:.2px}
+  .search{margin:8px 16px 12px;height:36px;border-radius:10px;border:0;padding:0 10px;font-size:17px;background:var(--fill,rgba(118,118,128,.12));width:calc(100% - 32px);box-sizing:border-box;color:inherit}
+  .list{margin:0 16px;background:var(--surface,#fff);border-radius:12px;list-style:none;padding:0}
+  .list li{padding:11px 16px;border-bottom:.5px solid var(--sep,rgba(60,60,67,.29));font-size:17px}
+  .list li:last-child{border-bottom:0}
+  .list small{display:block;font-size:15px;color:var(--fg2,#8a8a8e);margin-top:2px}
+  .add{position:absolute;right:20px;bottom:40px;width:56px;height:56px;border-radius:28px;border:0;background:var(--accent,#007aff);color:#fff;font-size:28px}
+  .count{text-align:center;font-size:12px;color:var(--fg2,#8a8a8e);margin:14px 0}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="nav" data-name="Title bar"><h1 data-name="Title">Notes</h1></div>
+  <input class="search" data-name="Search" placeholder="Search">
+  <ul class="list" data-name="List">
+    <li data-name="Shopping row">Shopping<small>Milk, eggs, bread</small></li>
+    <li data-name="Ideas row">Ideas<small>A walk by the river</small></li>
+    <li data-name="Books row">Books<small>Three to read this month</small></li>
+  </ul>
+  <div class="count" data-name="Count">3 notes</div>
+  <button class="add" data-name="Add button" aria-label="New note">+</button>
+</div>
+<script src="../kit.js"></script>
+<script>Kit.start({ root: '#app', id: 'plain-notes-check' });</script>
+</body>
+</html>

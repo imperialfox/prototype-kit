@@ -94,7 +94,8 @@
   function place(){ const on = btns.findIndex(b => b.getAttribute('aria-selected') === 'true'), b = btns[on]; knob.style.width = b.offsetWidth + 'px'; knob.style.transform = `translateX(${b.offsetLeft - 2}px)`; }
   btns.forEach(b => b.addEventListener('click', () => { btns.forEach(x => x.setAttribute('aria-selected', String(x === b))); place(); }));
   Kit.start({
-    app: 'Suki', title: 'kit demo', id: 'kit-demo-v1',
+    app: 'Suki', title: 'kit demo', id: 'kit-demo-v1', screen: 'rate-history', version: '1.1',
+    real: { iphone: 'assets/demo-real-iphone.png' },
     controls: [
       { name: 'Signal', options: ['Online', 'Offline'], onChange: i => { document.getElementById('source').textContent = i ? 'Saved on your phone · last rate 30 Oct' : 'ECB reference rates · checked 2 Nov'; } },
       { name: 'Launcher (pick one)', options: ['Circle', 'Capsule', 'Edge tab', 'Square'], onChange: i => Kit.setLauncher(['circle', 'capsule', 'tab', 'square'][i]) }
