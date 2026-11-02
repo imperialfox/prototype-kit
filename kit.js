@@ -15,7 +15,7 @@
   const AN = { l: 'Align left', c: 'Align centre', r: 'Align right', t: 'Align top', m: 'Align middle', b: 'Align bottom' };
 
   const S = {
-    opts: null, root: null, el: {}, device: 'iphone', look: 0, motion: 0, inspect: true, skel: false, custom: {},
+    opts: null, root: null, el: {}, device: 'iphone', look: 0, motion: 0, inspect: true, skel: false, onion: 1, tweening: false, custom: {},
     phone: false, open: true, launcher: 'circle', scale: 1,
     sel: [], key: null, multi: false, snap: true, alignTo: 'key', original: false, versions: [], viewing: -1, draftModel: null, saving: false, lastTap: null,
     model: { v: 1, edits: {} }, undo: [], redo: [], lastNudge: 0, nextGroup: 1,
@@ -272,6 +272,7 @@
       { name: 'View', options: ['Normal', 'Skeleton'], get: () => (S.skel ? 1 : 0), set: i => setSkel(i === 1) }
     ];
     if (S.versions.length) g.push({ name: 'Version', options: ['Draft'].concat(S.versions.map(v => v.name)), get: () => S.viewing + 1, set: i => setViewing(i - 1) });
+    if (S.versions.length) g.push({ name: 'Onion skin', options: ['Off', 'Before', 'Both'], get: () => S.onion, set: i => { S.onion = i; savePrefs(); render(); } });
     S.opts.controls.forEach(c => g.push({ name: c.name, own: true, options: c.options, get: () => S.custom[c.name], set: i => { S.custom[c.name] = i; try { c.onChange && c.onChange(i, c.options[i]); } catch (e) { console.error(e); } if (S.skel) markText(); applyAll(); render(); } }));
     return g;
   }
@@ -290,6 +291,13 @@
         h('div', { class: 'kit-gl' }, g.name),
         h('div', { class: 'kit-seg', role: 'group', 'aria-label': g.name },
           g.options.map((o, i) => h('button', { type: 'button', class: i === cur ? 'on' : '', 'aria-pressed': String(i === cur), onclick: () => { g.set(i); renderPanel(); fire(); } }, o)))));
+      if (g.name === 'Onion skin' && S.onion) {
+        const nb = onionNeighbours(), key = h('div', { class: 'kit-onion-key' });
+        if (nb.before) key.append(h('span', null, h('i', { style: 'background:' + ONION.before }), 'Before: ' + nb.before.name));
+        if (nb.after) key.append(h('span', null, h('i', { style: 'background:' + ONION.after }), 'After: ' + nb.after.name));
+        if (!nb.before && !nb.after) key.append(h('span', null, 'Nothing to compare on this side'));
+        p.append(key);
+      }
     });
   }
   function renderLauncher() {
@@ -311,7 +319,7 @@
   function setInspect(v) {
     S.inspect = !!v; document.body.classList.toggle('kit-edit', S.inspect);
     if (!S.inspect) { S.hover = null; S.ptr = null; S.guides = []; tipHide(true); }
-    if (store) try { store.setItem('kit:prefs', JSON.stringify({ inspect: S.inspect })); } catch (e) { }
+    savePrefs();
     renderDock(); renderPanel(); layout(); render(); fire();
   }
   function renderDock() {
@@ -321,7 +329,7 @@
     b.append(icon('insp')); if (shape !== 'tab') b.append(h('span', null, 'Inspect'));
   }
   function inspBtn(cls) {
-    return h('button', { type: 'button', class: cls + (S.inspect ? ' on' : ''), 'aria-pressed': String(S.inspect), 'aria-label': 'Inspect', onclick: () => setInspect(!S.inspect), 'data-tip': 'Inspect|' + (S.inspect ? 'On: taps pick parts to inspect and adjust. Turn off to use the prototype normally' : 'Off: the prototype works normally. Turn on to inspect and adjust parts') + '|I' }, icon('insp'), h('span', null, 'Inspect'));
+    return h('button', { type: 'button', class: cls + (S.inspect ? ' on' : ''), 'aria-pressed': String(S.inspect), 'aria-label': 'Inspect', onclick: () => setInspect(!S.inspect), 'data-tip': 'Inspect|' + (S.inspect ? 'On: taps pick parts to inspect and adjust. Turn off to use the prototype normally' : 'Off: the prototype works normally. Turn on to inspect and adjust parts') + '|I' }, icon('insp'));
   }
   function markText() { S.root.querySelectorAll('*').forEach(el => { if ([...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) el.classList.add('kit-txt'); }); }
 
@@ -395,11 +403,64 @@
     }
   }
 
+  /* ---------- onion skin ---------- */
+  const ONION = { before: '#ff453a', after: '#30d158' };
+  function onionNeighbours() {
+    // Versions in order, then Draft, like frames on a timeline.
+    const draft = S.viewing < 0 ? S.model : S.draftModel;
+    const seq = S.versions.map(v => ({ name: v.name, model: v.model })).concat([{ name: 'Draft', model: draft }]);
+    const i = S.viewing < 0 ? seq.length - 1 : S.viewing;
+    return { before: S.onion >= 1 && i > 0 ? seq[i - 1] : null, after: S.onion >= 2 && i < seq.length - 1 ? seq[i + 1] : null };
+  }
+  function ghosts(ov, frame, col, u) {
+    if (!frame) return 0;
+    const keys = new Set(Object.keys(S.model.edits).concat(Object.keys(frame.model.edits || {})));
+    let n = 0, labelled = false;
+    keys.forEach(k => {
+      const el = elOf(k); if (!el || !el.isConnected) return;
+      const cur = S.model.edits[k] || {}, oth = frame.model.edits[k] || {}, r = rectOf(el);
+      const bx = r.x - (cur.dx || 0), by = r.y - (cur.dy || 0);
+      const bw = cur.w != null && cur.w0 != null ? cur.w0 : r.w, bh = cur.h != null && cur.h0 != null ? cur.h0 : r.h;
+      const g = { x: bx + (oth.dx || 0), y: by + (oth.dy || 0), w: oth.w != null ? oth.w : bw, h: oth.h != null ? oth.h : bh };
+      if (Math.abs(g.x - r.x) < 0.5 && Math.abs(g.y - r.y) < 0.5 && Math.abs(g.w - r.w) < 0.5 && Math.abs(g.h - r.h) < 0.5) return;
+      const rad = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, g.w / 2, g.h / 2);
+      ov.append(sv('rect', { class: 'kit-ghost', x: g.x, y: g.y, width: Math.max(0, g.w), height: Math.max(0, g.h), rx: rad, fill: col, 'fill-opacity': .045, stroke: col, 'stroke-opacity': .85, 'stroke-width': 1.2 * u, 'stroke-dasharray': `${4 * u} ${3 * u}` }));
+      const c1 = { x: g.x + g.w / 2, y: g.y + g.h / 2 }, c2 = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+      if (Math.hypot(c2.x - c1.x, c2.y - c1.y) > 3) {
+        ov.append(sv('line', { x1: c1.x, y1: c1.y, x2: c2.x, y2: c2.y, stroke: col, 'stroke-opacity': .7, 'stroke-width': 1.2 * u }));
+        ov.append(sv('circle', { cx: c1.x, cy: c1.y, r: 2.5 * u, fill: col }));
+      }
+      if (!labelled) {
+        labelled = true; const t = frame.name.length > 18 ? frame.name.slice(0, 17) + '…' : frame.name, w = (t.length * 6.3 + 10) * u;
+        ov.append(sv('rect', { x: g.x, y: g.y - 16 * u, width: w, height: 15 * u, rx: 4 * u, fill: col, opacity: .9 }));
+        ov.append(sv('text', { x: g.x + 5 * u, y: g.y - 5 * u, style: `font-size:${11 * u}px;fill:#fff;font-family:-apple-system,system-ui,sans-serif` }, t));
+      }
+      n++;
+    });
+    return n;
+  }
+  function drawOnion(ov, u) {
+    if (S.original || S.tweening || !S.onion || !S.versions.length) return;
+    const nb = onionNeighbours();
+    ghosts(ov, nb.before, ONION.before, u); ghosts(ov, nb.after, ONION.after, u);
+  }
+  function tween(fn) {
+    // Parts glide from where they were to where they are now, then the ghosts appear.
+    if (S.motion === 2) return fn();
+    const k = S.motion === 1 ? 4 : 1, ms = 420 * k;
+    S.tweening = true; scr().classList.add('kit-tween'); void scr().offsetWidth;
+    fn();
+    clearTimeout(S.tweenT); S.tweenT = setTimeout(() => { scr().classList.remove('kit-tween'); S.tweening = false; schedule(); }, ms + 40);
+  }
+  function savePrefs() { if (store) try { store.setItem('kit:prefs', JSON.stringify({ inspect: S.inspect, onion: S.onion })); } catch (e) { } }
+
   /* ---------- overlay on the screen ---------- */
   function drawOv() {
     const ov = S.el.ov; ov.textContent = '';
     const W = scr().offsetWidth, H = scr().offsetHeight, u = 1 / (S.scale || 1);
     ov.setAttribute('width', W); ov.setAttribute('height', H); ov.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    drawOnion(ov, u);
+    if (S.tweening) return;
     if (!S.inspect) { if (!S.original) changeList().forEach((c, i) => { if (c.e.note && c.el && c.el.isConnected) { const r = inkRect(c.el); bubble(ov, r.x + r.w + 6 * u, r.y + 2 * u, i + 1, u); } }); return; }
     const sel = liveSel();
     if (S.hover && !sel.includes(S.hover) && S.hover.isConnected) {
@@ -914,7 +975,7 @@
     if (i < 0) S.draftModel = null;
     S.viewing = i; S.sel = []; S.key = null; S.err = ''; S.saving = false; S.showText = false; S.copied = null;
     S.status = i >= 0 ? `Viewing “${S.versions[i].name}”. It can't be changed.` : '';
-    applyAll(); renderPanel(); render(); fire();
+    tween(applyAll); renderPanel(); render(); fire();
   }
   function saveVersion(name) {
     S.err = ''; const n = String(name || '').trim();
@@ -929,7 +990,7 @@
   function makeDraft() {
     if (S.viewing < 0) return; const v = S.versions[S.viewing];
     setViewing(-1);
-    commit('Restore version', () => { S.model.edits = JSON.parse(JSON.stringify(v.model.edits)); });
+    tween(() => commit('Restore version', () => { S.model.edits = JSON.parse(JSON.stringify(v.model.edits)); }));
     S.status = `The draft now matches “${v.name}”. Undo puts it back.`; render();
   }
   function toggleLock() {
@@ -1048,7 +1109,7 @@
     const canvas = h('div', { class: 'kit-canvas' }, el.rt, el.rl, el.box);
     document.body.append(h('div', { class: 'kit-stage' }, el.dock, el.panel, canvas, el.insp));
     S.open = !(window.innerWidth <= 600);
-    load(); try { const pr = store && JSON.parse(store.getItem('kit:prefs') || '{}'); if (pr && typeof pr.inspect === 'boolean') S.inspect = pr.inspect; } catch (e) { }
+    load(); try { const pr = store && JSON.parse(store.getItem('kit:prefs') || '{}'); if (pr && typeof pr.inspect === 'boolean') S.inspect = pr.inspect; if (pr && [0, 1, 2].includes(pr.onion)) S.onion = pr.onion; } catch (e) { }
     document.body.classList.toggle('kit-edit', S.inspect);
     applyLook(); applyMotion(); bindLayer(); bindKeys(); bindTips(); bindOutside();
     renderPanel(); layout(); applyAll(); render();
@@ -1067,7 +1128,7 @@
     setLauncher(shape) { S.launcher = shape; renderLauncher(); renderPanel(); },
     changesText, undo, redo, align, distribute, group, ungroup, nudge, field: applyField,
     setAlignTo(v) { S.alignTo = v; render(); },
-    inspect: v => setInspect(v !== false), deselect, note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
+    inspect: v => setInspect(v !== false), deselect, onion(i) { S.onion = i; savePrefs(); renderPanel(); render(); }, note(text) { const sel = liveSel(); if (sel.length !== 1) return false; commit('Note', () => { E(sel[0]).note = String(text); }); return true; },
     lock: toggleLock, saveVersion, view: setViewing, makeDraft, versions: () => S.versions.map(v => v.name),
     tap(name, shift) { const el = S.root.querySelector('[data-name="' + CSS.escape(name) + '"]'); if (!el) return false; tapSelect({ target: el, shift: !!shift, deep: false }); render(); return true; },
     setGap(v) { S.gapVal = String(v); },
@@ -1076,7 +1137,7 @@
     refresh() { applyAll(); render(); },
     k: () => (S.motion === 1 ? 4 : 1),
     reduced: () => S.motion === 2,
-    state: () => ({ key: S.key ? nameOf(S.key) : null, viewing: S.viewing, edits: JSON.parse(JSON.stringify(S.model.edits)), undo: S.undo.map(u => u.name), redo: S.redo.map(u => u.name), sel: liveSel().map(nameOf), scale: S.scale, phone: S.phone, open: S.open })
+    state: () => ({ onion: S.onion, tweening: S.tweening, key: S.key ? nameOf(S.key) : null, viewing: S.viewing, edits: JSON.parse(JSON.stringify(S.model.edits)), undo: S.undo.map(u => u.name), redo: S.redo.map(u => u.name), sel: liveSel().map(nameOf), scale: S.scale, phone: S.phone, open: S.open })
   };
   window.Kit = api;
 })();

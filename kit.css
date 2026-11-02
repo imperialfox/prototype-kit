@@ -15,7 +15,7 @@ body.kit button{font:inherit;color:inherit}
 .kit-ins{display:flex;align-items:center;gap:6px;height:36px;padding:0 13px;border-radius:999px;background:var(--k-card);border:1px solid var(--k-line);color:var(--k-fg);cursor:pointer;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.12)}
 .kit-ins.on,.kit-ins-p.on{background:var(--k-acc);border-color:var(--k-acc);color:#fff}
 .kit-ins.is-tab{width:22px;height:44px;padding:0;justify-content:center;border-radius:0 12px 12px 0;border-left:0}
-.kit-ins-p{flex:none;display:flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:999px;border:0;background:var(--k-fill);cursor:pointer;font-size:12px;margin-left:auto}
+.kit-ins-p{flex:none;display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:50%;border:0;background:var(--k-fill);cursor:pointer;margin-left:auto}
 .kit-ins-p + .kit-min{margin-left:6px}
 .kit-launcher.is-circle{width:40px;height:40px;border-radius:50%}
 .kit-launcher.is-square{width:40px;height:40px;border-radius:11px}
@@ -135,3 +135,9 @@ body.kit-phone .kit-ihd{display:flex;align-items:center;justify-content:space-be
 
 .kit-launcher:focus,.kit-ins:focus{outline:none}
 .kit-launcher:focus-visible,.kit-ins:focus-visible,.kit-ins-p:focus-visible{outline:2px solid var(--k-acc);outline-offset:2px}
+
+/* Onion skin */
+.kit-screen.kit-tween .kit-root *{transition:translate calc(.42s*var(--k)) cubic-bezier(.3,1.15,.5,1),width calc(.42s*var(--k)) cubic-bezier(.3,1.15,.5,1),height calc(.42s*var(--k)) cubic-bezier(.3,1.15,.5,1),border-radius calc(.42s*var(--k)) ease!important}
+.kit-onion-key{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:11px;color:var(--k-fg2)}
+.kit-onion-key span{display:inline-flex;align-items:center;gap:5px}
+.kit-onion-key i{display:inline-block;width:10px;height:10px;border-radius:3px;opacity:.85}

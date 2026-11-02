@@ -1,6 +1,6 @@
 # Prototype kit · scripts (2 Nov 2026)
 
-Kept here until the kit has its own repo. `kit.css` and `kit.js` live inside the published [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793638940-90e6): its `<style id="kit-css">` and `<script id="kit-js">` blocks are the two files, word for word. The demo page is the same page with those two blocks swapped for `<link rel="stylesheet" href="kit.css">` and `<script src="kit.js"></script>`.
+Kept here until the kit has its own repo. `kit.css` and `kit.js` live inside the published [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793639334-5bce): its `<style id="kit-css">` and `<script id="kit-js">` blocks are the two files, word for word. The demo page is the same page with those two blocks swapped for `<link rel="stylesheet" href="kit.css">` and `<script src="kit.js"></script>`.
 
 ## tools/bundle.py
 
@@ -226,6 +226,28 @@ def main():
                 problems.append(f"{label}: undo didn't bring the old draft back")
             if page.evaluate("Kit.versions()") != ["First try"]:
                 problems.append(f"{label}: versions list wrong")
+            # Onion skin: ghosts of the version before (and after), and a glide when switching
+            page.evaluate("Kit.view(-1)")
+            page.wait_for_function("!Kit.state().tweening")
+            page.evaluate("n => { Kit.select(n); Kit.nudge(0, 10); Kit.nudge(12, 0); }", names[2])
+            page.evaluate("Kit.onion(1)")
+            if not page.evaluate("document.querySelectorAll('.kit-ov .kit-ghost').length"):
+                problems.append(f"{label}: onion skin Before shows no ghost on Draft")
+            page.evaluate("Kit.onion(0)")
+            if page.evaluate("document.querySelectorAll('.kit-ov .kit-ghost').length"):
+                problems.append(f"{label}: onion skin Off still shows ghosts")
+            page.evaluate("Kit.onion(2); Kit.view(0)")
+            if not page.evaluate("Kit.state().tweening"):
+                problems.append(f"{label}: switching versions didn't glide")
+            page.wait_for_timeout(600)
+            if page.evaluate("Kit.state().tweening"):
+                problems.append(f"{label}: the glide didn't finish")
+            if not page.evaluate("document.querySelectorAll('.kit-ov .kit-ghost').length"):
+                problems.append(f"{label}: onion skin Both shows no ghost of the draft after this version")
+            page.screenshot(path=str(shots / f"{label}_onion.png"))
+            check("onion skin")
+            page.evaluate("Kit.view(-1); Kit.onion(1)")
+            page.wait_for_timeout(600)
             # Deselect: a click outside the phone, Esc, or Shift+Cmd+A
             if not mobile:
                 page.evaluate("n => Kit.select(n)", names[1])
