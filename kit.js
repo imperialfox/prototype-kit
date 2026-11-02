@@ -1,4 +1,5 @@
-/* Prototype kit 1.0 · shared frame, controls, inspector and editing tools for Ivan's app prototypes.
+/* Prototype kit 1.0.0 · MIT · https://github.com/imperialfox/prototype-kit
+   Shared frame, controls, inspector and editing tools for clickable app prototypes, for any app.
    Prototype-only: nothing here is ever built into an app.
    Use: put the app in one element (e.g. <div id="app">), then call Kit.start({ app: 'Your app', root: '#app', controls: [...] }). */
 (function () {
@@ -1293,6 +1294,7 @@
   }
 
   const api = {
+    version: '1.0.0',
     start,
     get: () => ({ device: S.device, look: S.look, motion: S.motion, inspect: S.inspect, skeleton: S.skel, custom: Object.assign({}, S.custom) }),
     set(name, i) { const g = groups().find(x => x.name === name); if (!g) throw new Error('Kit: no control called ' + name); g.set(i); renderPanel(); fire(); },

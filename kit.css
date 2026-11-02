@@ -4,7 +4,7 @@
 body.kit{--k-bg:#e9e9ee;--k-card:#fff;--k-fg:#1c1c1e;--k-fg2:#6c6c72;--k-line:rgba(60,60,67,.18);--k-fill:rgba(118,118,128,.12);--k-acc:#007aff;--k-err:#d70015;--k-ok:#248a3d;--k-tick:rgba(60,60,67,.55);
  margin:0;background:var(--k-bg);color:var(--k-fg);font:13px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;-webkit-text-size-adjust:100%;touch-action:manipulation;overflow-x:hidden}
 @media (prefers-color-scheme:dark){body.kit{--k-bg:#111113;--k-card:#1f1f22;--k-fg:#f2f2f7;--k-fg2:#9a9aa1;--k-line:rgba(235,235,245,.16);--k-fill:rgba(118,118,128,.3);--k-acc:#0a84ff;--k-err:#ff6961;--k-ok:#30d158;--k-tick:rgba(235,235,245,.5)}}
-body.kit button{font:inherit;color:inherit}
+:where(body.kit) button{font:inherit;color:inherit}
 .kit-stage{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:center;gap:16px;padding:12px;box-sizing:border-box;min-height:100vh}
 
 /* Launcher and controls panel */

@@ -1,7 +1,7 @@
 # Prototype kit · Blueprint (2 Nov 2026)
 
-**Stage:** Rendered 2 Nov 2026, 17:49 · Build: awaiting · live state: `HANDOFF.md` in `imperialfox/prototype-kit`, which Build creates. Until then the record is held in the kit's local working copy and this line.
-**Prototype:** [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793641901-293e; earlier 1793641362-2856, 1793640713-dd85, 1793640186-8757, 1793639334-5bce, 1793638940-90e6, 1793638630-3f11, 1793638198-6571 and 1793637040-f3ec). The `kit.css` and `kit.js` inside it are the kit, word for word. The two scripts are in `claude/prototype_kit_scripts.md`.
+**Stage:** Rendered 2 Nov 2026, 17:49 · Built 2 Nov 2026 as kit 1.0.0 · live state: [`HANDOFF.md`](../HANDOFF.md) in `imperialfox/prototype-kit`.
+**Prototype:** [Prototype kit demo](https://claude.ai/artifact/WTiCAEY7mAMmD9QgEKWtby) (version 1793642735-726e, kit 1.0.0; approved as 1793641901-293e; earlier 1793641362-2856, 1793640713-dd85, 1793640186-8757, 1793639334-5bce, 1793638940-90e6, 1793638630-3f11, 1793638198-6571 and 1793637040-f3ec). The kit's files, scripts included, live in this repo.
 **From:** the workflow audit's C05 "Prototype starter" (`claude/suki_workflow_skills_audit_2026-11-02.md`) and the rate history chat (2 Nov, 15:42): "build the prototype tools once, as a shared kit".
 
 ## Goal

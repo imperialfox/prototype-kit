@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>New prototype</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+/* Your app's own look goes here. Keep every rule under #app so it can't touch the kit.
+   The kit gives the screen Apple's base colours as variables (--bg, --surface, --fg, --fg2, --fg3, --sep, --fill, --accent),
+   switches them for Dark, sets --k for Motion (1 normal, 4 slow) and adds these classes to the screen:
+   .dark, .is-iphone / .is-ipad / .is-mac, .motion-reduced. Bring your app's own tokens instead if it has them. */
+#app .page{position:absolute;inset:0;overflow-y:auto;padding:58px 16px 120px;box-sizing:border-box}
+.is-ipad #app .page{padding:96px 40px 60px}
+#app .lt{font-size:34px;font-weight:700;letter-spacing:.01em;margin:0 0 12px}
+#app .empty{font-size:17px;color:var(--fg2);margin:0}
+</style>
+</head>
+<body>
+<!-- The prototype's screens. Give each part a data-name in plain words ("Save button", "Total"),
+     so the inspector, the Outline and Copy changes can talk about it. -->
+<div id="app">
+  <section class="page" data-name="Page">
+    <h1 class="lt" data-name="Title">Title</h1>
+    <p class="empty" data-name="Placeholder">Your screen goes here.</p>
+  </section>
+</div>
+
+<script src="kit.js"></script>
+<script>
+  Kit.start({
+    // Name the app and this prototype; they head the Copy changes list. Leave app out and the kit just says "the prototype".
+    app: '',
+    title: '',
+    // A new id for each prototype, so its saved changes, versions and guides stay separate.
+    id: 'new-prototype-v1',
+    // This prototype's own states, as short groups. The kit already has Device, Look, Motion and View.
+    controls: [
+      // { name: 'Signal', options: ['Online', 'Offline'], onChange: i => { /* redraw for state i */ } }
+    ]
+  });
+  // Device, Look, Motion and View changes arrive here, if a screen needs to redraw for them.
+  window.addEventListener('kit:change', e => { /* e.detail: { device, look, motion, inspect, skeleton, custom } */ });
+</script>
+</body>
+</html>
