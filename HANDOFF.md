@@ -112,6 +112,7 @@ Done when:
 ## Kit 1.2
 
 **Render:** 2 Nov 2026, 20:25. Ivan: "I'm ready to fast track it 1.2, render" (straight from the plan, no preview).
+**Render (widened):** 4 Nov 2026, 16:35. Ivan: "fold this the kit 1.2 add to the inspector menu a way to hide guides, also arrange the menu just how adobo illustrator would have it. use tabs if necessary to reduce clutter. render". Adds items 8 to 12 below. The layout details in them are Claude's defaults, set at this Render; Ivan can change any of them before Build.
 **Build:** awaiting Ivan's instruction.
 
 Makes the rulers, guides and inspector follow scrolling, so positions read right on long, scrolling screens. Today both rulers measure the screen (0 is always its top), guides are pinned to the screen, and a part far down a list reads its on-screen position. Moves and size changes are stored as differences, so Copy changes is not affected.
@@ -124,16 +125,27 @@ Scope:
 5. **The inspector's Top box shows both** for a part in a scrolling area, e.g. "Top 120 on screen · 480 on page".
 6. **The same for sideways scrolling** (carousels) on the top ruler.
 7. When several areas scroll (a sheet over a list), the rulers follow the one holding the picked part.
-8. `CHANGELOG.md` 1.2, README updated, `Kit.version` `'1.2.0'`, a longer list on `tools/plain.html` so there is something to scroll, and `tools/check.py` covering the above (scroll a long list, read the rulers, guides and Top box).
+8. **Hide guides.** A "Show guides" switch, like Illustrator's View › Guides › Hide Guides, with the same shortcut ⌘;. Hidden guides are kept, not cleared: they aren't drawn, can't be grabbed and nothing snaps to them. While hidden, the switch reads "Guides hidden · 3". Dragging a new guide out of a ruler shows them all again. The choice is remembered on the device, like Inspect. This covers your own guides only; the pink snapping lines shown while dragging are Smart snapping.
+9. **The inspector in three tabs, named and ordered like Illustrator's panel dock:** Properties · Layers · Changes. Undo and redo stay above the tabs; the status line stays below them. The open tab is remembered on the device. Picking a part doesn't switch tabs (as in Illustrator); Layers highlights it.
+10. **Properties, in the order of Illustrator's Properties panel.**
+    - With a part picked, top to bottom: its name and path; **Transform** (Left, Top, Width, Height, Corners, and the box sizes); **Appearance** (Fill, Colour with its contrast, Text style); **Align** (the six align buttons, Space out with Gap, Line up with: Key object, Selection, Parent, Screen); **Quick actions** (Group or Ungroup, Lock, Repeat, Select several); **Checks** (VoiceOver, Tap area); **Note**.
+    - With nothing picked, as Illustrator's document view: **Rulers and guides** (Ruler: Auto, Screen, Page from item 2; Show guides; Clear guides with its count; Smart snapping), then the shortcuts hint.
+    - So the Ruler control from item 2 lives here, not in the controls panel, and Clear guides and Smart snapping move here from Arrange. Smart snapping also gets Illustrator's Smart Guides shortcut, ⌘U, so it can be switched with a part picked.
+11. **Layers** is today's Outline, always open in its own tab, with the change numbers beside parts. **Changes** holds Copy changes, Show original, Save as version, Clear, the saved versions count and the text to paste.
+12. On a phone, the inspector sheet gets the same tabs, each at least 44 pt tall.
+13. `CHANGELOG.md` 1.2, README updated, `Kit.version` `'1.2.0'`, a longer list on `tools/plain.html` so there is something to scroll, and `tools/check.py` covering the above (scroll a long list, read the rulers, guides and Top box; every tab and section reachable on a computer and a phone; hide guides by switch and by ⌘;; hidden guides not drawn, grabbed or snapped to; a new guide showing them again; the switch and the open tab kept after a reload).
 
 Agreed (default taken at Render): Ruler starts on Auto; the control's choice is remembered on the device like Inspect.
+Agreed (widened Render): guides start shown; the inspector opens on Properties; tab names and section order as in items 9 to 11; nothing in 1.1's inspector is removed, only moved.
 Still universal: no app's name, colours or screens in the kit.
-Not in scope: guides on the page's store (they stay on the device); anything else in "Left for later".
+Not in scope: guides on the page's store (they stay on the device); locking guides and hide or lock from the Outline (still under "Left for later" and "Still out"); anything else in "Left for later".
 
 Done when:
 - With a part picked in a scrolled list, the left ruler's numbers match its place on the page, and fixed bars keep screen numbers with their stretch shaded.
 - A guide dropped on scrolling content scrolls with it, one dropped on a fixed bar doesn't, and both are back after a reload.
 - The Top box shows both numbers in a scrolling area, and one number elsewhere.
 - Screen mode behaves exactly as 1.1.
+- Show guides off hides every guide, by switch or ⌘;, and turning it back on shows them unchanged.
+- The inspector has Properties, Layers and Changes tabs, Properties follows Illustrator's order, and every control from 1.1 is still there.
 - `tools/check.py` passes on the demo, the starter, the rebuilt rate history and the plain page.
 
